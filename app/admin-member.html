@@ -95,12 +95,28 @@
         </div>
 
         <label class="field" data-only="song"><span>분위기 <small>예: 자장가, 신나게</small></span><input class="input" name="mood" maxlength="30"></label>
-        <label class="field">
-          <span id="text-label">동화 글 <small>쪽마다 빈 줄로 나눠 주세요</small></span>
+        <div class="field" data-only="story">
+          <span>표지 그림 <small>선택 · 비워 두면 1쪽 그림을 표지로 써요</small></span>
+          <div id="cover-slot"></div>
+        </div>
+        <div class="field" data-only="story">
+          <span>쪽 <small>쪽마다 그림 한 장과 글 · 정사각형 그림이 가장 잘 맞아요 · 사용자에게는 책처럼 넘겨 보여요</small></span>
+          <ol class="page-editor" id="page-editor"></ol>
+          <div class="page-editor__tools">
+            <button type="button" class="btn btn--ghost btn--sm" id="page-add">+ 쪽 추가</button>
+            <label class="btn btn--ghost btn--sm">그림 여러 장 한 번에 넣기
+              <input type="file" id="page-bulk" accept="image/*" multiple hidden></label>
+            <button type="button" class="btn btn--ghost btn--sm" id="page-split">글 붙여넣어 쪽 나누기</button>
+          </div>
+          <small class="muted">여러 장을 넣으면 파일 이름 순서대로 그림 없는 쪽부터 채우고, 남으면 쪽을 새로 만들어요.</small>
+        </div>
+
+        <label class="field" data-only="song">
+          <span id="text-label">노래 가사 <small>한 줄에 한 소절씩</small></span>
           <textarea class="textarea" name="text" style="min-height:180px"></textarea>
         </label>
 
-        <div class="field">
+        <div class="field" data-only="song">
           <span>파일 <small id="file-hint">그림(JPG·PNG·WEBP). 올린 순서대로 1쪽, 2쪽에 붙어요</small></span>
           <ul class="media-list" id="media-list"></ul>
           <input type="file" id="media-input" multiple>

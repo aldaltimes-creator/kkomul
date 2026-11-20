@@ -17,7 +17,8 @@ if (ready) {
     out.textContent = '로그아웃';
     out.addEventListener('click', async () => {
       out.disabled = true;
-      await sb.auth.signOut();
+      try { await sb.auth.signOut({ scope: 'local' }); } catch { /* 무시 */ }
+      try { Object.keys(localStorage).filter((k) => /^sb-.*-auth-token/.test(k)).forEach((k) => localStorage.removeItem(k)); } catch { /* 무시 */ }
       location.reload();
     });
     login?.replaceWith(out);

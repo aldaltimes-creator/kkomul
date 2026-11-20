@@ -157,14 +157,46 @@
       <div class="sheet__body">
         <p id="make-text"></p>
         <label class="field">
-          <span>바라는 점 <small>선택 · 예: 빵빵이가 꼭 나왔으면 좋겠어요, 잔잔한 자장가로</small></span>
-          <textarea class="textarea" id="make-note" maxlength="500" style="min-height:90px"></textarea>
+          <span>바라는 점 <small>선택 · 자세히 적을수록 우리 아이에게 꼭 맞게 만들어요</small></span>
+          <textarea class="textarea" id="make-note" maxlength="500" style="min-height:120px"></textarea>
         </label>
-        <p class="muted">요청을 받으면 정성껏 만들어 이 기록에 올려 드려요. 완성되면 앨범에서 바로 볼 수 있어요.</p>
+        <div class="chips-box">
+          <p class="examples__label">자주 쓰는 문구 <small>누르면 넣고, 다시 누르면 빼요</small></p>
+          <div id="make-chips"></div>
+        </div>
+        <details class="examples">
+          <summary class="examples__label">자세한 예시 보기 <small>누르면 칸에 들어가요. 고쳐 써도 돼요</small></summary>
+          <ul class="examples__list" id="make-examples"></ul>
+        </details>
+        <div class="process">
+          <p class="process__title">이렇게 진행돼요</p>
+          <div id="make-process"></div>
+        </div>
       </div>
       <div class="sheet__foot">
         <button class="btn btn--ghost btn--sm" value="cancel" formnovalidate>취소</button>
         <button class="btn btn--primary btn--sm" value="make">요청하기</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- 요청 완료 안내 -->
+  <dialog class="sheet" id="made-dialog" aria-labelledby="made-dialog-title">
+    <form method="dialog">
+      <div class="sheet__head">
+        <h2 id="made-dialog-title">요청했어요</h2>
+        <button class="sheet__close" value="cancel" aria-label="닫기">×</button>
+      </div>
+      <div class="sheet__body">
+        <p id="made-text"></p>
+        <div class="process">
+          <p class="process__title">앞으로 이렇게 진행돼요</p>
+          <div id="made-process"></div>
+        </div>
+        <p class="muted">진행 상황은 이 기록의 요청 버튼을 누르면 언제든 볼 수 있어요.</p>
+      </div>
+      <div class="sheet__foot">
+        <button class="btn btn--primary btn--sm" value="ok">확인</button>
       </div>
     </form>
   </dialog>

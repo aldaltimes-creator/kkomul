@@ -77,6 +77,31 @@ form.addEventListener('submit', async (e) => {
   }
 });
 
+// 카카오·구글로 시작하기: 그 회사 화면에서 로그인하고 돌아옴 (비밀번호는 꼬물상자에 오지 않음)
+const NAMES = { kakao: '카카오', google: '구글' };
+document.querySelectorAll('[data-provider]').forEach((btn) => btn.addEventListener('click', async () => {
+  if (!ok) return say('먼저 Supabase 연결 정보를 넣어 주세요.', 'error');
+  const provider = btn.dataset.provider;
+  btn.disabled = true;
+  say(`${NAMES[provider]}로 이동하는 중…`);
+  const { error } = await sb.auth.signInWithOAuth({
+    provider,
+    options: { redirectTo: new URL(next, location.href).href },
+  });
+  if (error) {
+    btn.disabled = false;
+    say(error.message.includes('not enabled')
+      ? `${NAMES[provider]} 로그인은 아직 준비 중이에요. 이메일로 시작해 주세요.`
+      : `문제가 생겼어요: ${error.message}`, 'error');
+  }
+}));
+
+// 간편 로그인에서 돌아왔는데 실패한 경우 (취소 등)
+const back = new URLSearchParams(location.hash.slice(1));
+if (back.get('error')) say(back.get('error_description')?.includes('email')
+  ? '이메일 제공에 동의해야 가입할 수 있어요. 다시 시도해 주세요.'
+  : '간편 로그인을 마치지 못했어요. 다시 시도해 주세요.', 'error');
+
 $('#forgot').addEventListener('click', async () => {
   if (!ok) return;
   if (!email.value || !email.checkValidity()) return say('비밀번호를 찾을 이메일을 먼저 적어 주세요.', 'error');

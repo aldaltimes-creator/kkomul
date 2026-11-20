@@ -112,7 +112,10 @@ async function loadRequests() {
       h('div', { class: 'areq__actions' },
         h('button', { class: 'btn btn--primary btn--sm', type: 'button', onclick: () => openEditor(c) },
           c.status === 'ready' ? '고치기' : '만들어 올리기'),
-        c.status === 'ready' && h('a', { class: 'btn btn--ghost btn--sm', href: `creation.html?id=${c.id}`, target: '_blank' }, '사용자 화면 보기 ↗')));
+        c.status === 'ready'
+          ? h('a', { class: 'btn btn--ghost btn--sm', href: `creation.html?id=${c.id}`, target: '_blank' }, '사용자 화면 보기 ↗')
+          : (c.content?.pages?.length || c.content?.lines?.length)
+            && h('a', { class: 'btn btn--ghost btn--sm', href: `creation.html?id=${c.id}&preview=1`, target: '_blank' }, '미리보기 ↗')));
   }) : [h('p', { class: 'muted' }, '아직 요청이 없어요')]));
 }
 
@@ -125,16 +128,111 @@ let added = [];       // 새로 고른 파일 [{file, type}]
 
 function syncFields() {
   const isStory = editing.kind === 'story';
-  form.querySelector('[data-only="song"]').hidden = isStory;
+  form.querySelectorAll('[data-only="song"]').forEach((el) => { el.hidden = isStory; });
+  form.querySelectorAll('[data-only="story"]').forEach((el) => { el.hidden = !isStory; });
   form.querySelector('[data-only="failed"]').hidden = form.status.value !== 'failed';
-  $('#text-label').firstChild.textContent = isStory ? '동화 글 ' : '노래 가사 ';
-  $('#text-label small').textContent = isStory ? '쪽마다 빈 줄로 나눠 주세요' : '한 줄에 한 소절씩';
-  $('#file-hint').textContent = isStory
-    ? '그림(JPG·PNG·WEBP). 올린 순서대로 1쪽, 2쪽에 붙어요'
-    : '음원(MP3·M4A·WAV)과 커버 그림. 최대 50MB';
-  $('#media-input').accept = isStory ? 'image/*' : 'audio/*,image/*';
+  $('#file-hint').textContent = '음원(MP3·M4A·WAV)과 커버 그림. 최대 50MB';
+  $('#media-input').accept = 'audio/*,image/*';
 }
 form.status.addEventListener('change', syncFields);
+
+// ---------------------------------------------------------------- 동화 쪽 편집 (쪽마다 그림 + 글)
+// 그림 칸: { path } 저장된 그림 | { file, url } 새로 고른 그림 | null
+let pages = [];        // [{ text, img }]
+let cover = null;
+let storedUrls = {};   // 저장된 그림의 서명 주소
+
+const imgSrc = (img) => img && (img.url ?? storedUrls[img.path]);
+const MAX = 50 * 1024 * 1024;
+const imageFile = (file) => {
+  if (!file.type.startsWith('image/')) { toast(`${file.name}: 그림 파일만 넣을 수 있어요`, 'error'); return null; }
+  if (file.size > MAX) { toast(`${file.name}: 50MB까지 올릴 수 있어요`, 'error'); return null; }
+  return { file, url: URL.createObjectURL(file) };
+};
+const pickImage = (onPick) => {
+  const input = h('input', { type: 'file', accept: 'image/*' });
+  input.addEventListener('change', () => { const img = input.files[0] && imageFile(input.files[0]); if (img) onPick(img); });
+  input.click();
+};
+
+function imageSlot(img, { label, onPick, onRemove, wide = false }) {
+  const src = imgSrc(img);
+  return h('div', { class: `img-slot${wide ? ' img-slot--wide' : ''}` },
+    src
+      ? h('img', { src, alt: label })
+      : h('button', { type: 'button', class: 'img-slot__empty', onclick: () => pickImage(onPick) }, '＋ 그림 넣기'),
+    src && h('div', { class: 'img-slot__bar' },
+      h('button', { type: 'button', class: 'btn--text', onclick: () => pickImage(onPick) }, '바꾸기'),
+      h('button', { type: 'button', class: 'btn--text', onclick: onRemove }, '빼기')));
+}
+
+function renderPages() {
+  $('#cover-slot').replaceChildren(imageSlot(cover, {
+    label: '표지 그림', wide: true,
+    onPick: (img) => { cover = img; renderPages(); },
+    onRemove: () => { cover = null; renderPages(); },
+  }));
+  const move = (i, d) => { const j = i + d; if (j < 0 || j >= pages.length) return; [pages[i], pages[j]] = [pages[j], pages[i]]; renderPages(); };
+  $('#page-editor').replaceChildren(...(pages.length ? pages.map((p, i) => h('li', { class: 'page-ed' },
+    h('div', { class: 'page-ed__num' }, `${i + 1}쪽`),
+    imageSlot(p.img, {
+      label: `${i + 1}쪽 그림`,
+      onPick: (img) => { p.img = img; renderPages(); },
+      onRemove: () => { p.img = null; renderPages(); },
+    }),
+    (() => {
+      const ta = h('textarea', { class: 'textarea page-ed__text', rows: 4, maxlength: 600, placeholder: `${i + 1}쪽 글` });
+      ta.value = p.text;
+      ta.addEventListener('input', () => { p.text = ta.value; });
+      return ta;
+    })(),
+    h('div', { class: 'page-ed__tools' },
+      h('button', { type: 'button', class: 'btn--text', disabled: i === 0, onclick: () => move(i, -1), 'aria-label': `${i + 1}쪽 위로` }, '↑'),
+      h('button', { type: 'button', class: 'btn--text', disabled: i === pages.length - 1, onclick: () => move(i, 1), 'aria-label': `${i + 1}쪽 아래로` }, '↓'),
+      h('button', { type: 'button', class: 'btn--text', onclick: () => {
+        if ((p.text.trim() || p.img) && !confirm(`${i + 1}쪽을 지울까요?`)) return;
+        pages.splice(i, 1); renderPages();
+      } }, '지우기'))))
+    : [h('li', { class: 'muted page-ed--empty' }, '아직 쪽이 없어요. ‘+ 쪽 추가’나 ‘그림 여러 장 한 번에 넣기’로 시작하세요.')]));
+}
+
+$('#page-add').addEventListener('click', () => { pages.push({ text: '', img: null }); renderPages(); });
+$('#page-bulk').addEventListener('change', (e) => {
+  const files = [...e.target.files].sort((a, b) => a.name.localeCompare(b.name, 'ko', { numeric: true }));
+  e.target.value = '';
+  for (const file of files) {
+    const img = imageFile(file);
+    if (!img) continue;
+    const empty = pages.find((p) => !p.img);
+    if (empty) empty.img = img; else pages.push({ text: '', img });
+  }
+  renderPages();
+});
+$('#page-split').addEventListener('click', () => {
+  const raw = prompt('동화 글 전체를 붙여 넣으세요. 빈 줄마다 한 쪽으로 나눠요.\n(이미 있는 쪽에 차례로 들어가고, 남으면 쪽을 새로 만들어요)');
+  if (!raw?.trim()) return;
+  raw.split(/\n\s*\n/).map((t) => t.trim()).filter(Boolean).forEach((t, i) => {
+    if (pages[i]) pages[i].text = t; else pages.push({ text: t, img: null });
+  });
+  renderPages();
+});
+
+async function loadStoryPages(c) {
+  const images = (c.media ?? []).filter((m) => m.type === 'image');
+  storedUrls = await signed('creation-media', images.map((m) => m.path));
+  const saved = c.content?.pages ?? [];
+  const hasPageImages = saved.some((p) => p.image);
+  // 예전 방식(그림을 올린 순서대로 쪽에 붙임)으로 저장된 것도 쪽마다 나눠서 불러옴
+  const legacy = hasPageImages ? [] : images.filter((m) => m.path !== c.content?.cover);
+  const count = Math.max(saved.length, legacy.length);
+  pages = Array.from({ length: count }, (_, i) => ({
+    text: saved[i]?.text ?? '',
+    img: saved[i]?.image ? { path: saved[i].image } : legacy[i] ? { path: legacy[i].path } : null,
+  }));
+  cover = c.content?.cover ? { path: c.content.cover } : null;
+  if (!pages.length) pages = [{ text: '', img: null }];
+  renderPages();
+}
 
 function renderMedia() {
   $('#media-list').replaceChildren(
@@ -181,7 +279,45 @@ function openEditor(c) {
   form.error.value = c.error ?? '';
   syncFields();
   renderMedia();
+  if (c.kind === 'story') {
+    pages = []; cover = null;
+    renderPages();
+    loadStoryPages(c);
+  }
   $('#edit-dialog').showModal();
+}
+
+// 새로 고른 그림 하나 올리기 → 저장 경로
+async function uploadOne(c, file, uploaded) {
+  const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+  const path = `${c.user_id}/${c.id}/${Date.now()}-${uploaded.length + 1}.${ext}`;
+  const { error } = await sb.storage.from('creation-media').upload(path, file, { contentType: file.type, upsert: false });
+  if (error) throw new Error(`${file.name} 올리기 실패: ${error.message}`);
+  uploaded.push({ type: 'image', path, name: file.name });
+  return path;
+}
+
+// 동화 저장: 쪽마다 그림 경로를 content.pages[].image 에 넣고, 안 쓰게 된 그림은 지움
+async function saveStory(c, status, uploaded) {
+  const used = async (img) => (!img ? null : img.path ?? await uploadOne(c, img.file, uploaded));
+  const outPages = [];
+  for (const p of pages) {
+    const text = p.text.trim();
+    const image = await used(p.img);
+    if (text || image) outPages.push(image ? { text, image } : { text });
+  }
+  const coverPath = await used(cover);
+  const keep = new Set([...outPages.map((p) => p.image).filter(Boolean), coverPath].filter(Boolean));
+  const old = (c.media ?? []).filter((m) => m.type === 'image');
+  const nextMedia = [
+    ...old.filter((m) => keep.has(m.path)),
+    ...uploaded.filter((u) => keep.has(u.path)),
+  ];
+  return {
+    content: { pages: outPages, ...(coverPath ? { cover: coverPath } : {}) },
+    media: nextMedia,
+    drop: old.filter((m) => !keep.has(m.path)).map((m) => m.path),
+  };
 }
 
 form.addEventListener('submit', async (e) => {
@@ -196,7 +332,9 @@ form.addEventListener('submit', async (e) => {
     : { mood: form.mood.value.trim(), lines: text ? text.split('\n').map((l) => l.trim()).filter(Boolean) : [] };
 
   if (status === 'ready') {
-    const hasBody = (content.pages?.length || content.lines?.length || media.length || added.length || form.external_url.value.trim());
+    const hasBody = c.kind === 'story'
+      ? (pages.some((p) => p.text.trim() || p.img) || form.external_url.value.trim())
+      : (content.lines?.length || media.length || added.length || form.external_url.value.trim());
     if (!form.elements.title.value.trim()) return toast('완료로 바꾸려면 제목을 적어 주세요', 'error');
     if (!hasBody) return toast('완료로 바꾸려면 글, 파일, 외부 링크 중 하나는 있어야 해요', 'error');
   }
@@ -205,6 +343,23 @@ form.addEventListener('submit', async (e) => {
   await busy(e.submitter, '저장하는 중…', async () => {
     const uploaded = [];
     try {
+      if (c.kind === 'story') {
+        const story = await saveStory(c, status, uploaded);
+        const { error } = await sb.from('creations').update({
+          status,
+          title: form.elements.title.value.trim() || null,
+          content: story.content,
+          media: story.media,
+          external_url: form.external_url.value.trim() || null,
+          error: status === 'failed' ? (form.error.value.trim() || '요청이 취소됐어요') : null,
+        }).eq('id', c.id);
+        if (error) throw new Error(`저장하지 못했어요: ${error.message}`);
+        if (story.drop.length) await sb.storage.from('creation-media').remove(story.drop);
+        $('#edit-dialog').close();
+        toast(status === 'ready' ? '완료! 사용자 앨범에서 책처럼 보여요' : `'${REQ_STATUS[status]}'(으)로 저장했어요`);
+        await loadRequests();
+        return;
+      }
       for (const a of added) {
         const ext = (a.file.name.split('.').pop() || (a.type === 'audio' ? 'mp3' : 'jpg')).toLowerCase().replace(/[^a-z0-9]/g, '');
         const path = `${c.user_id}/${c.id}/${Date.now()}-${uploaded.length + 1}.${ext}`;

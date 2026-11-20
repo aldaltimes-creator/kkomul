@@ -1,7 +1,7 @@
 // 우리 아이 앨범: 아이 소개, 달별 기록, 이달의 순간, 동화·노래 만들기
 import {
   sb, guardConfig, requireUser, h, $, toast, ymd, monthStart, fmtDate, fmtMonth,
-  ageLabel, photoUrls, creditStatus, busy,
+  ageLabel, photoUrls, creditStatus, busy, processSteps,
 } from './lib.js';
 
 if (!guardConfig()) await new Promise(() => {}); // 설정 전에는 여기서 멈춤
@@ -199,13 +199,133 @@ async function removeRecord(r) {
 
 // ---------------------------------------------------------------- 동화·노래 요청
 let makeTarget = null;
+
+// 요청 메모 예시: {name} 은 아이 이름으로 바뀜
+const MAKE_EXAMPLES = {
+  song: [
+    { tag: '신나는 노래', text: "후렴구에 '위잉위잉'을 넣어 주세요. 신나는 노래로 해 주시고, 우리 아이 이름 '{name}'{j:이/가} 노래에 나오게 해 주세요. 엄마를 '마미'라고 부르는데 '마미'라는 말도 넣어 주세요." },
+    { tag: '자장가', text: "잠들기 전에 들려줄 잔잔한 자장가로 해 주세요. '사랑해 우리 {name}, 잘 자요 {name}'처럼 아이 이름을 부르는 소절이 반복되면 좋겠어요. 1분 정도로 짧게, 피아노 반주면 좋겠어요." },
+    { tag: '습관 노래', text: "양치하기 싫어해서 양치할 때 같이 부를 노래가 필요해요. 박자가 빠르고 율동하기 좋게, 후렴은 '치카치카 반짝반짝'으로 해 주세요. 마지막엔 '{name} 이가 반짝!'으로 끝나면 좋겠어요." },
+    { tag: '가족 노래', text: "아빠, 마미, 할머니가 다 나오는 노래로 만들어 주세요. 아이가 요즘 자주 하는 말 '꼭 안아!'를 가사에 넣어 주시고, 따라 부르기 쉬운 짧은 멜로디였으면 해요." },
+  ],
+  story: [
+    { tag: '모험 이야기', text: "'{name}'{j:이/가} 꼬마 소방관이 되어 친구들을 구하는 모험 이야기로 해 주세요. 제일 좋아하는 빨간 소방차 '빵빵이'가 꼭 나오고, 마지막엔 마미에게 꼭 안기며 끝났으면 좋겠어요. 10쪽 정도면 좋겠어요." },
+    { tag: '용기 주는 이야기', text: "요즘 어린이집 가는 걸 무서워해서 용기를 주는 이야기면 좋겠어요. 아이가 한 말 '나 혼자 할 수 있어!'를 꼭 넣어 주시고, 그림은 따뜻한 수채화 느낌으로 부탁드려요." },
+    { tag: '잠자리 동화', text: "잠자리에서 읽어 줄 짧은 동화로 해 주세요. 그날 본 강아지 '몽이'와 밤하늘 별님이 나오고, 문장은 짧게, '멍멍', '반짝반짝' 같은 소리 흉내 말이 많았으면 좋겠어요." },
+    { tag: '습관 동화', text: "편식을 해서 채소와 친해지는 이야기를 부탁드려요. 브로콜리 나무 숲을 여행하는 '{name}'의 이야기로, 혼내는 느낌 없이 재미있게요. 주인공 얼굴은 올린 사진처럼 동그란 단발머리로 그려 주세요." },
+  ],
+};
+
+// 예시 글에 아이 이름 넣기: {name}, {j:이/가} 는 이름 받침에 맞춰 고름
+function fillName(text, name) {
+  const code = name.charCodeAt(name.length - 1) - 0xac00;
+  const batchim = code >= 0 && code <= 11171 && code % 28 !== 0;
+  return text.replaceAll('{name}', name).replace(/\{j:([^/}]*)\/([^}]*)\}/g, (_, a, b) => (batchim ? a : b));
+}
+
+function renderExamples(kind) {
+  const name = state.child?.name || '우리 아이';
+  const note = $('#make-note');
+  note.placeholder = `예) ${fillName(MAKE_EXAMPLES[kind][0].text, name)}`;
+  $('#make-examples').replaceChildren(...MAKE_EXAMPLES[kind].map((ex) => {
+    const text = fillName(ex.text, name);
+    return h('li', {}, h('button', {
+      type: 'button', class: 'example',
+      onclick: () => {
+        const cur = note.value.trim();
+        note.value = (cur ? `${cur}\n${text}` : text).slice(0, 500);
+        note.focus();
+      },
+    }, h('b', {}, ex.tag), h('span', {}, text)));
+  }));
+}
+
 function askMake(record, kind) {
   makeTarget = { record, kind };
   const left = kind === 'story' ? state.credit.stories_left : state.credit.songs_left;
   $('#make-dialog-title').textContent = `${KIND[kind]} 요청`;
   $('#make-text').textContent = `「${record.title}」 기록으로 ${KIND[kind]}를 요청해요. 이번 기간에 남은 ${KIND[kind]} ${left}${kind === 'story' ? '편' : '곡'} 중 1번을 써요.`;
   $('#make-note').value = '';
+  renderExamples(kind);
+  renderChips(kind);
+  $('#make-process').replaceChildren(processSteps(-1));
   $('#make-dialog').showModal();
+}
+
+// ---------------------------------------------------------------- 자주 쓰는 문구 뱃지
+// 문구를 누르면 메모 끝에 한 문장으로 붙이고, 다시 누르면 뺌
+const thing = (word) => [word, fillName(`'${word}'{j:이/가} 나오게 해 주세요.`, word)];
+const CHIP_GROUPS = {
+  song: [
+    { label: '분위기', items: [
+      ['신나는 노래', '신나는 노래로 해 주세요.'],
+      ['잔잔한 자장가', '잔잔한 자장가로 해 주세요.'],
+      ['율동하기 좋게', '율동하기 좋은 빠른 박자로 해 주세요.'],
+      ['쉬운 후렴', '따라 부르기 쉬운 짧은 후렴이면 좋겠어요.'],
+      ['1분 정도', '1분 정도로 짧게 해 주세요.'],
+      ['피아노 반주', '피아노 반주로 해 주세요.'],
+    ] },
+    { label: '가사에 꼭', items: [
+      ['아이 이름 후렴에', '아이 이름이 후렴에 나오게 해 주세요.'],
+      ['아이가 한 말', '아이가 한 말을 가사에 넣어 주세요.'],
+      ["엄마는 '마미'", "엄마를 '마미'라고 불러 주세요."],
+      ["아빠는 '대디'", "아빠를 '대디'라고 불러 주세요."],
+      ['소리 흉내 말', "후렴에 '위잉위잉' 같은 소리 흉내 말을 넣어 주세요."],
+      ["'사랑해' 반복", "'사랑해'라는 말이 반복되면 좋겠어요."],
+    ] },
+  ],
+  story: [
+    { label: '이야기', items: [
+      ['모험 이야기', '모험 이야기로 해 주세요.'],
+      ['용기 주는 이야기', '용기를 주는 이야기로 해 주세요.'],
+      ['잠자리 동화', '잠자리에서 읽기 좋게 짧게 해 주세요.'],
+      ['웃긴 장면 많이', '웃긴 장면이 많았으면 좋겠어요.'],
+      ['아이가 한 말 대사로', '아이가 한 말을 대사로 넣어 주세요.'],
+      ['10쪽 정도', '10쪽 정도면 좋겠어요.'],
+    ] },
+    { label: '그림', items: [
+      ['수채화 느낌', '따뜻한 수채화 느낌으로 그려 주세요.'],
+      ['알록달록 밝게', '알록달록 밝은 색으로 그려 주세요.'],
+      ['사진 속 아이처럼', '주인공을 올린 사진 속 아이처럼 그려 주세요.'],
+      ['그림 크게, 글 짧게', '그림을 크게, 글은 짧게 해 주세요.'],
+    ] },
+  ],
+  common: [
+    { label: '남자아이 인기', items: ['공룡', '소방차', '포크레인', '경찰차', '기차', '로봇', '우주선', '상어', '슈퍼히어로', '축구공'].map(thing) },
+    { label: '여자아이 인기', items: ['공주', '유니콘', '무지개', '요정', '토끼', '인어공주', '고양이', '발레리나', '꽃밭', '반짝이 리본'].map(thing) },
+    { label: '가족·습관', items: [
+      ['엄마 아빠 함께', '엄마 아빠가 함께 나오게 해 주세요.'],
+      ['할머니 할아버지', '할머니 할아버지도 나오게 해 주세요.'],
+      ['형제자매', '형제자매도 함께 나오게 해 주세요.'],
+      ['양치 습관', '양치 습관을 즐겁게 알려 주세요.'],
+      ['편식 고치기', '편식하지 않게 도와주는 내용이면 좋겠어요.'],
+      ['혼자 자기', '혼자 자는 용기를 주는 내용이면 좋겠어요.'],
+      ['어린이집 적응', '어린이집에 즐겁게 가는 내용이면 좋겠어요.'],
+      ['인사 잘하기', '인사를 잘하는 내용이면 좋겠어요.'],
+    ] },
+  ],
+};
+
+function renderChips(kind) {
+  const note = $('#make-note');
+  const has = (t) => note.value.includes(t);
+  const groups = [...CHIP_GROUPS[kind], ...CHIP_GROUPS.common];
+  const buttons = [];
+  const sync = () => buttons.forEach((b) => b.setAttribute('aria-pressed', String(has(b.dataset.text))));
+  $('#make-chips').replaceChildren(...groups.map((g) => h('div', { class: 'chip-group' },
+    h('p', { class: 'chip-group__label' }, g.label),
+    h('div', { class: 'chip-group__list' }, ...g.items.map(([short, t]) => {
+      const b = h('button', { type: 'button', class: 'chip', 'aria-pressed': 'false', dataset: { text: t }, title: t, onclick: () => {
+        note.value = has(t)
+          ? note.value.replace(t, '').replace(/[ \n]{2,}/g, ' ').trim()
+          : `${note.value.trim()}${note.value.trim() ? ' ' : ''}${t}`.slice(0, 500);
+        sync();
+      } }, short);
+      buttons.push(b);
+      return b;
+    })))));
+  note.oninput = sync;
+  sync();
 }
 
 $('#make-form').addEventListener('submit', async (e) => {
@@ -225,7 +345,9 @@ $('#make-form').addEventListener('submit', async (e) => {
     }
     makeTarget = null;
     $('#make-dialog').close();
-    toast(`${KIND[kind]}를 요청했어요. 완성되면 이 기록에서 볼 수 있어요.`);
+    $('#made-text').textContent = `「${record.title}」 기록으로 ${KIND[kind]}를 요청했어요. 정성껏 만들어 드릴게요.`;
+    $('#made-process').replaceChildren(processSteps(1));
+    $('#made-dialog').showModal();
     await refreshCredit();
     loadMonth();
   });

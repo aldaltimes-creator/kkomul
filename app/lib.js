@@ -57,7 +57,9 @@ async function addAdminLink(nav, before) {
 }
 
 export async function signOut() {
-  await sb.auth.signOut();
+  // 서버 세션이 이미 끊긴 경우에도 이 기기에서는 꼭 로그아웃되게 저장된 토큰을 지움
+  try { await sb.auth.signOut({ scope: 'local' }); } catch { /* 무시 */ }
+  try { Object.keys(localStorage).filter((k) => /^sb-.*-auth-token/.test(k)).forEach((k) => localStorage.removeItem(k)); } catch { /* 무시 */ }
   location.replace('../index.html');
 }
 
@@ -129,4 +131,23 @@ export async function busy(btn, label, fn) {
   btn.disabled = true; btn.textContent = label;
   try { return await fn(); }
   finally { btn.disabled = false; btn.textContent = old; }
+}
+
+// ---------------------------------------------------------------- 동화·노래 만드는 순서
+export const PROCESS_STEPS = [
+  { title: '요청 접수', desc: '요청이 관리자에게 바로 전달돼요.' },
+  { title: '필요하면 연락', desc: '추가 설명이 필요하면 가입한 이메일로 관리자가 연락드려요.' },
+  { title: '초안 작성', desc: '기록과 바라는 점을 바탕으로 초안을 만들어요.' },
+  { title: '확인(컨펌)', desc: '초안을 보여 드리고, 고칠 곳이 있으면 반영해요.' },
+  { title: '사이트에 올려 드려요', desc: '완성되면 앨범에서 바로 보고 들을 수 있어요.' },
+];
+
+// current: 지금 진행 중인 단계 번호(0부터). 그 앞은 끝난 단계로 표시
+export function processSteps(current = -1) {
+  return h('ol', { class: 'steps' }, ...PROCESS_STEPS.map((s, i) => h('li', {
+    class: `steps__item${i < current ? ' is-done' : i === current ? ' is-now' : ''}`,
+    'aria-current': i === current ? 'step' : null,
+  },
+  h('span', { class: 'steps__dot', 'aria-hidden': 'true' }, i < current ? '✓' : `${i + 1}`),
+  h('span', { class: 'steps__body' }, h('b', {}, s.title), h('span', {}, s.desc)))));
 }

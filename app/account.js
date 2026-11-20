@@ -13,11 +13,11 @@ sb.auth.onAuthStateChange((event) => {
   }
 });
 
-const { data: children } = await sb.from('children').select('*').order('created_at').limit(1);
+const { data: children } = await sb.from('children').select('*').eq('user_id', user.id).order('created_at').limit(1);
 const child = children?.[0];
 const cf = $('#child-form');
 if (child) {
-  cf.name.value = child.name;
+  cf.elements.name.value = child.name;
   cf.birth_date.value = child.birth_date ?? '';
   cf.likes.value = child.likes.join(', ');
   cf.family_call.value = child.family_call ?? '';
@@ -30,7 +30,7 @@ cf.addEventListener('submit', async (e) => {
   const btn = e.submitter;
   await busy(btn, '저장하는 중…', async () => {
     const { error } = await sb.from('children').update({
-      name: cf.name.value.trim(),
+      name: cf.elements.name.value.trim(),
       birth_date: cf.birth_date.value || null,
       likes: cf.likes.value.split(/[,，、]/).map((s) => s.trim()).filter(Boolean).slice(0, 8),
       family_call: cf.family_call.value.trim() || null,

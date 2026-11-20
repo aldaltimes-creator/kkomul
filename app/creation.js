@@ -1,4 +1,4 @@
-// 만든 동화·노래 보기, 하드북 주문
+// 요청한 동화·노래 보기 (관리자가 올린 글·그림·음원·링크), 하드북 주문
 import { sb, guardConfig, requireUser, h, $, toast, fmtDate, photoUrls, busy } from './lib.js';
 
 if (!guardConfig()) await new Promise(() => {}); // 설정 전에는 여기서 멈춤
@@ -6,6 +6,7 @@ await requireUser();
 
 const id = new URLSearchParams(location.search).get('id');
 const root = $('#creation');
+const KIND = { story: '동화', song: '노래' };
 let creation = null;
 
 async function load() {
@@ -19,56 +20,88 @@ async function load() {
     return;
   }
   creation = data;
-  if (data.status === 'pending') return renderPending();
+  if (data.status === 'ready') return renderReady();
   if (data.status === 'failed') return renderFailed();
-  await renderReady();
+  return renderWaiting();
 }
 
-let polls = 0;
-function renderPending() {
+const back = () => h('a', { class: 'btn btn--ghost btn--sm', href: 'index.html', style: 'margin-top:12px' }, '앨범으로');
+
+function renderWaiting() {
+  const c = creation;
+  const making = c.status === 'making';
   root.replaceChildren(h('div', { class: 'empty' },
-    h('b', {}, '아직 만들고 있어요'),
-    h('p', { class: 'muted' }, '잠시 뒤에 자동으로 보여 드려요.')));
-  if (polls++ < 40) setTimeout(load, 3000);
+    h('b', {}, making ? `${KIND[c.kind]}를 만들고 있어요` : `${KIND[c.kind]} 요청을 받았어요`),
+    h('p', { class: 'muted' }, making ? '완성되면 이 화면과 앨범에서 바로 볼 수 있어요.' : '곧 만들기 시작할게요. 완성되면 앨범에서 볼 수 있어요.'),
+    c.request_note && h('p', { class: 'muted', style: 'margin-top:8px' }, `바라는 점: ${c.request_note}`),
+    back()));
 }
 
 function renderFailed() {
   root.replaceChildren(h('div', { class: 'empty' },
-    h('b', {}, '만들지 못했어요'),
-    h('p', { class: 'muted' }, creation.error ?? '잠시 뒤 다시 시도해 주세요.'),
-    h('p', { class: 'muted' }, '실패한 작품은 횟수에서 빠져요.'),
-    h('a', { class: 'btn btn--ghost btn--sm', href: 'index.html', style: 'margin-top:12px' }, '앨범으로')));
+    h('b', {}, '요청이 취소됐어요'),
+    h('p', { class: 'muted' }, creation.error ?? '자세한 내용은 고객센터로 문의해 주세요.'),
+    h('p', { class: 'muted' }, '취소된 요청은 횟수에서 빠져요.'),
+    back()));
+}
+
+// 관리자가 올린 파일의 1시간짜리 주소
+async function mediaUrls(media) {
+  const paths = (media ?? []).map((m) => m.path);
+  if (!paths.length) return {};
+  const { data } = await sb.storage.from('creation-media').createSignedUrls(paths, 3600);
+  return Object.fromEntries((data ?? []).filter((d) => d.signedUrl).map((d) => [d.path, d.signedUrl]));
 }
 
 async function renderReady() {
   const c = creation;
   const rec = c.records;
   const isStory = c.kind === 'story';
-  const photo = rec?.photo_paths?.[0];
-  const urls = photo ? await photoUrls([photo]) : {};
-  document.title = `${c.title} — 꼬물상자`;
+  const media = c.media ?? [];
+  const images = media.filter((m) => m.type === 'image');
+  const audios = media.filter((m) => m.type === 'audio');
+  const [murls, purls] = await Promise.all([
+    mediaUrls(media),
+    !images.length && rec?.photo_paths?.[0] ? photoUrls([rec.photo_paths[0]]) : Promise.resolve({}),
+  ]);
+  document.title = `${c.title ?? KIND[c.kind]} — 꼬물상자`;
 
-  const body = isStory
-    ? h('div', { class: 'story-pages' }, ...(c.content?.pages ?? []).map((p, i) =>
-        h('section', { class: 'story-page', 'aria-label': `${i + 1}쪽` },
-          h('p', {}, p.text),
-          h('span', { class: 'story-page__num', 'aria-hidden': 'true' }, `${i + 1}`))))
-    : h('ol', { class: 'song-lines' }, ...(c.content?.lines ?? []).map((l) => h('li', {}, l)));
+  const pages = c.content?.pages ?? [];
+  const lines = c.content?.lines ?? [];
+  let body;
+  if (isStory) {
+    // 그림이 있으면 쪽마다 한 장씩, 남는 그림은 뒤에 이어서
+    const count = Math.max(pages.length, images.length);
+    body = h('div', { class: 'story-pages' }, ...Array.from({ length: count }, (_, i) => {
+      const img = images[i] && murls[images[i].path];
+      return h('section', { class: 'story-page', 'aria-label': `${i + 1}쪽` },
+        img && h('img', { class: 'story-page__img', src: img, alt: `${i + 1}쪽 그림`, loading: 'lazy' }),
+        pages[i]?.text && h('p', {}, pages[i].text),
+        h('span', { class: 'story-page__num', 'aria-hidden': 'true' }, `${i + 1}`));
+    }));
+  } else {
+    body = h('div', {},
+      ...audios.map((a) => murls[a.path] && h('audio', { class: 'song-audio', controls: true, preload: 'metadata', src: murls[a.path] })),
+      lines.length > 0 && h('ol', { class: 'song-lines' }, ...lines.map((l) => h('li', {}, l))));
+  }
+  const cover = !images.length && rec?.photo_paths?.[0] && purls[rec.photo_paths[0]];
 
-  root.replaceChildren(
+  // replaceChildren 은 false 를 글자로 넣으므로 빈 항목을 걸러 냄
+  root.replaceChildren(...[
     h('p', { class: 'creation__type' }, isStory ? '동화' : `노래${c.content?.mood ? ` · ${c.content.mood}` : ''}`),
-    h('h1', { class: 'creation__title' }, c.title),
+    h('h1', { class: 'creation__title' }, c.title ?? KIND[c.kind]),
     h('p', { class: 'muted' },
       `${c.children?.name ?? ''}의 ${rec ? `${fmtDate(rec.record_date)} 「${rec.title}」` : ''} 기록으로 만들었어요`),
-    urls[photo] && h('img', { class: 'creation__photo', src: urls[photo], alt: `${rec.title} 사진` }),
+    cover && h('img', { class: 'creation__photo', src: cover, alt: `${rec.title} 사진` }),
     body,
-    !isStory && h('p', { class: 'muted', style: 'margin-top:12px' }, '지금은 가사만 보여 드려요. 음원은 다음 단계에서 붙여요.'),
     h('div', { class: 'creation__actions' },
       h('a', { class: 'btn btn--ghost btn--sm', href: 'index.html' }, '← 앨범으로'),
+      c.external_url && h('a', { class: 'btn btn--ghost btn--sm', href: c.external_url, target: '_blank', rel: 'noopener noreferrer' },
+        isStory ? '크게 보기 ↗' : '다른 곳에서 듣기 ↗'),
       isStory && h('button', { class: 'btn btn--primary btn--sm', type: 'button', onclick: openOrder }, '하드북으로 받기 · 35,000원'),
-      h('button', { class: 'btn btn--ghost btn--sm', type: 'button', onclick: copyText }, '글 복사'),
+      (pages.length > 0 || lines.length > 0) && h('button', { class: 'btn btn--ghost btn--sm', type: 'button', onclick: copyText }, '글 복사'),
     ),
-  );
+  ].filter(Boolean));
 }
 
 async function copyText() {

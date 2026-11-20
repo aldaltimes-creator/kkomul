@@ -147,20 +147,24 @@
     </form>
   </dialog>
 
-  <!-- 만들기 확인 -->
+  <!-- 동화·노래 요청 -->
   <dialog class="sheet" id="make-dialog" aria-labelledby="make-dialog-title">
-    <form method="dialog">
+    <form method="dialog" id="make-form">
       <div class="sheet__head">
-        <h2 id="make-dialog-title">동화 만들기</h2>
-        <button class="sheet__close" value="cancel" aria-label="닫기">×</button>
+        <h2 id="make-dialog-title">동화 요청</h2>
+        <button class="sheet__close" value="cancel" formnovalidate aria-label="닫기">×</button>
       </div>
       <div class="sheet__body">
         <p id="make-text"></p>
-        <p class="muted">만드는 데 1분쯤 걸려요. 이 화면을 닫지 말고 기다려 주세요.</p>
+        <label class="field">
+          <span>바라는 점 <small>선택 · 예: 빵빵이가 꼭 나왔으면 좋겠어요, 잔잔한 자장가로</small></span>
+          <textarea class="textarea" id="make-note" maxlength="500" style="min-height:90px"></textarea>
+        </label>
+        <p class="muted">요청을 받으면 정성껏 만들어 이 기록에 올려 드려요. 완성되면 앨범에서 바로 볼 수 있어요.</p>
       </div>
       <div class="sheet__foot">
-        <button class="btn btn--ghost btn--sm" value="cancel">취소</button>
-        <button class="btn btn--primary btn--sm" value="make" id="make-confirm">만들기</button>
+        <button class="btn btn--ghost btn--sm" value="cancel" formnovalidate>취소</button>
+        <button class="btn btn--primary btn--sm" value="make">요청하기</button>
       </div>
     </form>
   </dialog>

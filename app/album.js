@@ -9,7 +9,10 @@ const user = await requireUser();
 
 const state = {
   child: null,
-  month: monthStart(new Date()),
+  // 모아보기에서 ?m=YYYY-MM 으로 들어오면 그 달을 보여 줌
+  month: /^\d{4}-\d{2}$/.test(new URLSearchParams(location.search).get('m') ?? '')
+    ? new Date(`${new URLSearchParams(location.search).get('m')}-01T00:00:00`)
+    : monthStart(new Date()),
   credit: null,
   moment: null,
   pendingPhotos: [], // { file, url }
@@ -17,7 +20,7 @@ const state = {
 
 // ---------------------------------------------------------------- 아이
 async function loadChild() {
-  const { data, error } = await sb.from('children').select('*').order('created_at').limit(1);
+  const { data, error } = await sb.from('children').select('*').eq('user_id', user.id).order('created_at').limit(1);
   if (error) throw error;
   state.child = data[0] ?? null;
 }
@@ -148,7 +151,9 @@ async function loadMonth() {
     sb.from('creations').select('id, record_id, kind, status, title').in('record_id', ids).order('created_at'),
     photoUrls(records.map((r) => r.photo_paths[0]).filter(Boolean)),
   ]);
-  list.replaceChildren(...records.map((r) => recordCard(r, urls, (creations ?? []).filter((c) => c.record_id === r.id))));
+  // 취소된 요청은 앨범에서 숨김 (횟수는 이미 돌려받음)
+  list.replaceChildren(...records.map((r) => recordCard(r, urls,
+    (creations ?? []).filter((c) => c.record_id === r.id && c.status !== 'failed'))));
 }
 
 function recordCard(r, urls, made) {
@@ -158,10 +163,11 @@ function recordCard(r, urls, made) {
     const left = c ? (kind === 'story' ? c.stories_left : c.songs_left) : 0;
     return h('button', {
       class: 'btn btn--ghost btn--sm', type: 'button', disabled: !c || left < 1,
-      title: !c ? '이용권이 필요해요' : left < 1 ? `이번 기간 ${KIND[kind]}를 모두 만들었어요` : null,
+      title: !c ? '이용권이 필요해요' : left < 1 ? `이번 기간 ${KIND[kind]} 요청을 모두 썼어요` : null,
       onclick: () => askMake(r, kind),
-    }, `${KIND[kind]}로 만들기`);
+    }, `${KIND[kind]} 요청`);
   };
+  const STATUS_LABEL = { pending: '요청됨', making: '만드는 중', failed: '취소됨' };
 
   return h('article', { class: 'card rec' },
     cover
@@ -176,7 +182,7 @@ function recordCard(r, urls, made) {
       h('div', { class: 'rec__actions' },
         ...made.map((m) => h('a', {
           class: 'made-link', href: `creation.html?id=${m.id}`, dataset: { status: m.status },
-        }, m.status === 'ready' ? `${KIND[m.kind]} 「${m.title}」` : m.status === 'pending' ? `${KIND[m.kind]} 만드는 중` : `${KIND[m.kind]} 실패`)),
+        }, m.status === 'ready' ? `${KIND[m.kind]} 「${m.title}」` : `${KIND[m.kind]} ${STATUS_LABEL[m.status]}`)),
         makeBtn('story'), makeBtn('song'),
         h('button', { class: 'btn--text', type: 'button', style: 'margin-left:auto;color:var(--ink-sub)', onclick: () => removeRecord(r) }, '지우기'),
       )));
@@ -191,37 +197,38 @@ async function removeRecord(r) {
   loadMonth();
 }
 
-// ---------------------------------------------------------------- 동화·노래 만들기
+// ---------------------------------------------------------------- 동화·노래 요청
 let makeTarget = null;
 function askMake(record, kind) {
   makeTarget = { record, kind };
   const left = kind === 'story' ? state.credit.stories_left : state.credit.songs_left;
-  $('#make-dialog-title').textContent = `${KIND[kind]} 만들기`;
-  $('#make-text').textContent = `「${record.title}」 기록으로 ${KIND[kind]}를 만들어요. 이번 기간에 남은 ${KIND[kind]} ${left}${kind === 'story' ? '편' : '곡'} 중 1번을 써요.`;
-  $('#make-dialog').returnValue = ''; // Esc로 닫으면 이전 값이 남으므로 비워 둠
+  $('#make-dialog-title').textContent = `${KIND[kind]} 요청`;
+  $('#make-text').textContent = `「${record.title}」 기록으로 ${KIND[kind]}를 요청해요. 이번 기간에 남은 ${KIND[kind]} ${left}${kind === 'story' ? '편' : '곡'} 중 1번을 써요.`;
+  $('#make-note').value = '';
   $('#make-dialog').showModal();
 }
 
-$('#make-dialog').addEventListener('close', async () => {
-  if ($('#make-dialog').returnValue !== 'make' || !makeTarget) return;
+$('#make-form').addEventListener('submit', async (e) => {
+  if (e.submitter?.value !== 'make' || !makeTarget) return;
+  e.preventDefault();
   const { record, kind } = makeTarget;
-  makeTarget = null;
-  toast(`${KIND[kind]}를 만들고 있어요. 1분쯤 걸려요…`);
-  document.body.style.cursor = 'progress';
-  try {
-    const { data, error } = await sb.functions.invoke('generate', { body: { record_id: record.id, kind } });
+  await busy(e.submitter, '요청하는 중…', async () => {
+    const { error } = await sb.rpc('request_creation', {
+      p_record: record.id, p_kind: kind, p_note: $('#make-note').value.trim() || null,
+    });
     if (error) {
-      let msg = error.message;
-      try { msg = (await error.context.json()).error ?? msg; } catch { /* 본문 없음 */ }
-      toast(msg, 'error');
-      await refreshCredit();
-      loadMonth();
+      const m = error.message;
+      toast(m.includes('NO_PLAN') ? '이용권이 없어요. 이용권을 먼저 골라 주세요.'
+        : m.includes('NO_CREDIT') ? `이번 기간 ${KIND[kind]} 요청을 모두 썼어요.`
+        : `요청하지 못했어요: ${m}`, 'error');
       return;
     }
-    location.href = `creation.html?id=${data.creation_id}`;
-  } finally {
-    document.body.style.cursor = '';
-  }
+    makeTarget = null;
+    $('#make-dialog').close();
+    toast(`${KIND[kind]}를 요청했어요. 완성되면 이 기록에서 볼 수 있어요.`);
+    await refreshCredit();
+    loadMonth();
+  });
 });
 
 async function refreshCredit() {

@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>회원 — 꼬물상자 관리</title>
+  <meta name="robots" content="noindex">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+  <link rel="stylesheet" href="../assets/style.css">
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <header class="app-top">
+    <div class="wrap app-top__inner">
+      <a class="logo" href="index.html" aria-label="꼬물상자 앨범">
+        <svg viewBox="0 0 32 32" aria-hidden="true"><rect class="logo__box" x="5" y="12" width="22" height="16" rx="4"/><rect class="logo__lid" x="3" y="8" width="26" height="6" rx="3"/><path class="logo__star" d="m16 1 1.6 3.3 3.6.5-2.6 2.5.6 3.6L16 9.2l-3.2 1.7.6-3.6-2.6-2.5 3.6-.5z"/></svg>
+        꼬물상자
+      </a>
+      <nav class="app-top__nav" aria-label="앱 메뉴">
+        <a href="index.html">앨범</a>
+        <a href="admin.html" aria-current="page">관리</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="app-main wrap" id="main">
+    <div id="denied" class="empty" hidden><b>관리자만 볼 수 있어요</b></div>
+
+    <div id="member" hidden>
+      <a class="link" href="admin.html">← 관리</a>
+      <div class="member-head">
+        <div>
+          <h1 class="page-title" id="m-email"></h1>
+          <p class="muted" id="m-meta"></p>
+        </div>
+        <div class="plan-box" id="m-plan"></div>
+      </div>
+      <div class="member-child card" id="m-child"></div>
+
+      <section class="admin-sec" aria-labelledby="mreq-title">
+        <div class="admin-sec__head"><h2 id="mreq-title">동화·노래 요청</h2></div>
+        <div class="stack" id="m-requests"></div>
+      </section>
+
+      <section class="admin-sec" aria-labelledby="mrec-title">
+        <div class="admin-sec__head"><h2 id="mrec-title">올린 기록</h2><span class="muted" id="m-rec-count"></span></div>
+        <div class="stack" id="m-records"></div>
+      </section>
+
+      <section class="admin-sec" aria-labelledby="mmom-title">
+        <div class="admin-sec__head"><h2 id="mmom-title">이달의 순간</h2></div>
+        <div class="table-wrap">
+          <table class="admin-table">
+            <thead><tr><th>달</th><th>가장 좋아한 말</th><th>처음 한 말</th><th>처음 한 행동</th></tr></thead>
+            <tbody id="m-moments"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="admin-sec" aria-labelledby="mord-title">
+        <div class="admin-sec__head"><h2 id="mord-title">하드북 주문</h2></div>
+        <div class="table-wrap">
+          <table class="admin-table">
+            <thead><tr><th>접수</th><th>동화</th><th>받는 분</th><th>연락처 · 주소</th><th>상태</th></tr></thead>
+            <tbody id="m-orders"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <!-- 만들어 올리기 -->
+  <dialog class="sheet sheet--wide" id="edit-dialog" aria-labelledby="edit-title">
+    <form method="dialog" id="edit-form">
+      <div class="sheet__head">
+        <h2 id="edit-title">동화 만들어 올리기</h2>
+        <button class="sheet__close" value="cancel" formnovalidate aria-label="닫기">×</button>
+      </div>
+      <div class="sheet__body">
+        <div class="source" id="edit-source"></div>
+
+        <div class="row">
+          <label class="field"><span>상태</span>
+            <select class="input" name="status">
+              <option value="pending">요청됨</option>
+              <option value="making">만드는 중</option>
+              <option value="ready">완료 (사용자에게 보여요)</option>
+              <option value="failed">취소 (횟수 돌려줌)</option>
+            </select>
+          </label>
+          <label class="field"><span>제목</span><input class="input" name="title" maxlength="40" placeholder="빵빵이와 반짝반짝 양치 출동"></label>
+        </div>
+
+        <label class="field" data-only="song"><span>분위기 <small>예: 자장가, 신나게</small></span><input class="input" name="mood" maxlength="30"></label>
+        <label class="field">
+          <span id="text-label">동화 글 <small>쪽마다 빈 줄로 나눠 주세요</small></span>
+          <textarea class="textarea" name="text" style="min-height:180px"></textarea>
+        </label>
+
+        <div class="field">
+          <span>파일 <small id="file-hint">그림(JPG·PNG·WEBP). 올린 순서대로 1쪽, 2쪽에 붙어요</small></span>
+          <ul class="media-list" id="media-list"></ul>
+          <input type="file" id="media-input" multiple>
+        </div>
+
+        <label class="field"><span>외부 링크 <small>선택 · 다른 사이트에서 만든 결과 주소</small></span>
+          <input class="input" name="external_url" type="url" placeholder="https://"></label>
+        <label class="field" data-only="failed"><span>취소 이유 <small>사용자에게 보여요</small></span>
+          <input class="input" name="error" maxlength="200"></label>
+      </div>
+      <div class="sheet__foot">
+        <button class="btn btn--ghost btn--sm" value="cancel" formnovalidate>닫기</button>
+        <button class="btn btn--primary btn--sm" value="save">저장</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+  <script type="module" src="admin-member.js"></script>
+</body>
+</html>

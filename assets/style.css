@@ -82,6 +82,7 @@ button { font: inherit; color: inherit; }
 
 .link { text-decoration: none; font-weight: 600; }
 .link:hover { color: var(--coral-btn); }
+.link-btn { border: 0; background: none; padding: 0; font: inherit; font-weight: 600; cursor: pointer; }
 
 .card {
   background: var(--surface); border: 1px solid var(--line);

@@ -24,26 +24,41 @@ export async function requireUser() {
     location.replace(`login.html?next=${encodeURIComponent(location.pathname.split('/').pop() + location.search)}`);
     return new Promise(() => {}); // 이동하는 동안 아래 코드가 돌지 않게
   }
-  addAdminLink();
+  decorateNav();
   return session.user;
 }
 
-// 관리자 계정이면 모든 화면의 상단 메뉴에 '관리' 링크를 붙임
-async function addAdminLink() {
+// 모든 앱 화면의 상단 메뉴를 같은 모양으로: 앨범 · 모아보기 · 이용권 · 계정 · (관리) · 소개 · 로그아웃
+function decorateNav() {
   const nav = document.querySelector('.app-top__nav');
-  if (!nav || nav.querySelector('a[href="admin.html"]')) return;
+  if (!nav || nav.dataset.ready) return;
+  nav.dataset.ready = '1';
+  const page = location.pathname.split('/').pop() || 'index.html';
+  const links = [['index.html', '앨범'], ['albums.html', '모아보기'], ['plans.html', '이용권'], ['account.html', '계정']];
+  const admin = nav.querySelector('a[href="admin.html"]'); // 관리 화면은 처음부터 들어 있음
+  nav.replaceChildren(...links.map(([href, label]) => {
+    const a = h('a', { href }, label);
+    if (href === page) a.setAttribute('aria-current', 'page');
+    return a;
+  }));
+  if (admin) nav.append(admin);
+  const intro = h('a', { href: '../index.html', class: 'nav-intro' }, '소개');
+  const out = h('button', { type: 'button', class: 'nav-logout', onclick: signOut }, '로그아웃');
+  nav.append(intro, out);
+  addAdminLink(nav, intro);
+}
+
+// 관리자 계정이면 '관리' 링크를 붙임
+async function addAdminLink(nav, before) {
+  if (nav.querySelector('a[href="admin.html"]')) return;
   const { data: isAdmin } = await sb.rpc('is_admin');
   if (!isAdmin || nav.querySelector('a[href="admin.html"]')) return;
-  const a = document.createElement('a');
-  a.href = 'admin.html';
-  a.textContent = '관리';
-  if (location.pathname.endsWith('/admin.html')) a.setAttribute('aria-current', 'page');
-  nav.append(a);
+  nav.insertBefore(h('a', { href: 'admin.html' }, '관리'), before);
 }
 
 export async function signOut() {
   await sb.auth.signOut();
-  location.replace('login.html');
+  location.replace('../index.html');
 }
 
 // DOM 도우미: 텍스트는 언제나 textContent로 넣어 사용자 입력이 HTML로 해석되지 않게

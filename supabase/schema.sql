@@ -126,6 +126,9 @@ grant select, insert, update, delete on public.children, public.records, public.
 grant select on public.subscriptions to authenticated;
 grant select, delete on public.creations to authenticated;
 grant select, insert on public.book_orders to authenticated;
+-- 서버 함수(Edge Function)가 쓰는 service_role 권한
+grant usage on schema public to service_role;
+grant all on all tables in schema public to service_role;
 
 drop policy if exists "plans readable" on public.plans;
 create policy "plans readable" on public.plans for select using (true);

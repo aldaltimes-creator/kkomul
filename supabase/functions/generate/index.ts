@@ -138,6 +138,9 @@ Deno.serve(async (req) => {
     : "이 기록으로 아이가 주인공인 노래 가사를 8줄로 써 주세요. 아이가 따라 부르기 쉽게 반복되는 후렴을 넣어 주세요.";
 
   // 3) Claude 호출 (구조화된 JSON 출력, 거절 시 서버 측 대체 모델로 다시 시도)
+  if (!Deno.env.get("ANTHROPIC_API_KEY")) {
+    return fail("AI 키(ANTHROPIC_API_KEY)가 아직 설정되지 않았어요. 관리자에게 알려 주세요.", 500);
+  }
   let parsed: { title: string; pages?: { text: string }[]; mood?: string; lines?: string[] };
   try {
     const response = await anthropic.beta.messages.create({

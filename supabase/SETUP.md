@@ -67,6 +67,24 @@ supabase functions deploy generate
 4. 기록 카드의 **동화로 만들기 / 노래로 만들기**
 5. 만든 동화에서 **하드북으로 받기** → 이용권 화면에 주문이 쌓여요
 
+## 7. 관리자 화면과 새 주문 알림
+1. SQL Editor에서 [`admin.sql`](admin.sql)을 실행합니다.
+2. 관리자로 쓸 계정의 이메일을 등록합니다. 앱에 그 이메일로 가입해 둔 뒤 SQL Editor에서:
+
+```sql
+insert into public.admin_emails (email) values ('관리자@이메일.com') on conflict do nothing;
+```
+
+3. 그 계정으로 로그인하면 **계정** 메뉴 옆에 **관리**가 생기고, `app/admin.html`에서 볼 수 있어요.
+   - 요약: 가입자, 쓰는 이용권, 이번 달 기록·작품, 처리할 주문
+   - 하드북 주문: 받는 분·연락처·주소, 상태를 고르면 바로 바뀌고 사용자 이용권 화면에도 반영돼요
+   - 만들기 실패 목록, 최근 가입자
+   - 새 주문이 들어오면 화면이 자동으로 새로 고쳐져요
+4. 새 주문 알림: [`functions/notify-order`](functions/notify-order/index.ts)를 배포하고, **Edge Functions → Secrets**에 아래 중 하나(또는 둘 다)를 넣으면 돼요.
+   - **디스코드**: `DISCORD_WEBHOOK_URL` (디스코드 채널 설정 → 연동 → 웹후크 → 새 웹후크 → URL 복사)
+   - **이메일(Resend)**: `RESEND_API_KEY` + `ADMIN_EMAIL` (resend.com 가입 후 API 키. 도메인을 인증하기 전에는 Resend 가입 이메일로만 보낼 수 있어요)
+   - 알림에는 주소·연락처를 넣지 않고, 관리자 화면 링크만 보내요.
+
 ## 아직 연결하지 않은 것 (다음 단계)
 - **결제**: 지금은 이용권을 ‘시험용’으로 바로 켜요(`subscriptions.is_demo = true`). 결제(토스페이먼츠 등)를 붙이면 결제 완료 웹훅에서만 `activate_plan`을 부르도록 바꿔야 해요.
 - **노래 음원**: 지금은 가사만 만들어요.

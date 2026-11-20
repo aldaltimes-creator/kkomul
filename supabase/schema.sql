@@ -119,6 +119,14 @@ alter table public.moments       enable row level security;
 alter table public.creations     enable row level security;
 alter table public.book_orders   enable row level security;
 
+-- 최근 Supabase 프로젝트는 새 테이블에 API 권한을 자동으로 주지 않으므로 직접 부여 (RLS가 행 단위로 다시 거름)
+grant usage on schema public to anon, authenticated;
+grant select on public.plans to anon, authenticated;
+grant select, insert, update, delete on public.children, public.records, public.moments to authenticated;
+grant select on public.subscriptions to authenticated;
+grant select, delete on public.creations to authenticated;
+grant select, insert on public.book_orders to authenticated;
+
 drop policy if exists "plans readable" on public.plans;
 create policy "plans readable" on public.plans for select using (true);
 

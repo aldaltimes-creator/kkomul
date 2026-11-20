@@ -24,7 +24,21 @@ export async function requireUser() {
     location.replace(`login.html?next=${encodeURIComponent(location.pathname.split('/').pop() + location.search)}`);
     return new Promise(() => {}); // 이동하는 동안 아래 코드가 돌지 않게
   }
+  addAdminLink();
   return session.user;
+}
+
+// 관리자 계정이면 모든 화면의 상단 메뉴에 '관리' 링크를 붙임
+async function addAdminLink() {
+  const nav = document.querySelector('.app-top__nav');
+  if (!nav || nav.querySelector('a[href="admin.html"]')) return;
+  const { data: isAdmin } = await sb.rpc('is_admin');
+  if (!isAdmin || nav.querySelector('a[href="admin.html"]')) return;
+  const a = document.createElement('a');
+  a.href = 'admin.html';
+  a.textContent = '관리';
+  if (location.pathname.endsWith('/admin.html')) a.setAttribute('aria-current', 'page');
+  nav.append(a);
 }
 
 export async function signOut() {

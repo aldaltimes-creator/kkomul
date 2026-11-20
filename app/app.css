@@ -152,6 +152,26 @@ dialog.sheet::backdrop { background: rgb(61 47 42 / .35); }
 .orders { display: grid; gap: 10px; }
 .order { display: flex; justify-content: space-between; gap: 12px; padding: 14px 18px; border-radius: 14px; background: var(--surface); border: 1px solid var(--line); }
 
+/* 관리자 */
+.admin-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 18px; }
+.stat-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+.stat { padding: 16px 18px; border-radius: 16px; background: var(--surface); border: 1px solid var(--line); min-width: 0; }
+.stat--alert { border-color: var(--coral-btn); background: rgb(224 122 95 / .08); }
+.stat__label { font-size: 13px; font-weight: 700; color: var(--ink-sub); }
+.stat__value { font-family: var(--serif); font-weight: 700; font-size: 20px; line-height: 1.4; margin: 4px 0 2px; overflow-wrap: anywhere; }
+.admin-sec { margin-top: 36px; }
+.admin-sec__head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; }
+.admin-sec__head h2 { font-family: var(--serif); font-size: 20px; }
+.admin-filter { display: flex; align-items: center; gap: 8px; }
+.admin-filter .input { width: auto; padding: 6px 10px; }
+.table-wrap { overflow-x: auto; border-radius: 16px; border: 1px solid var(--line); background: var(--surface); }
+.admin-table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 720px; }
+.admin-table th { text-align: left; padding: 10px 14px; background: var(--bg-tint); font-size: 13px; color: var(--ink-sub); white-space: nowrap; }
+.admin-table td { padding: 12px 14px; border-top: 1px solid var(--line); vertical-align: top; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.admin-table td.cell-wrap { white-space: normal; min-width: 200px; }
+.input--sm { padding: 6px 10px; width: auto; font-size: 14px; }
+@media (max-width: 960px) { .stat-grid { grid-template-columns: repeat(2, 1fr); } }
+
 /* 알림 */
 .toast {
   position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); translate: -50% 20px; z-index: 100;

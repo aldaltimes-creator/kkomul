@@ -126,6 +126,7 @@ async function loadRequests() {
           uploaded ? '업로드됨' : '업로드 전'),
         h('span', { class: 'muted' }, `요청 ${dt(c.created_at)}${c.updated_at ? ` · 수정 ${dt(c.updated_at)}` : ''}`)),
       h('p', {}, rec ? `기록: ${fmtDate(rec.record_date)} 「${rec.title}」` : '기록: (지워진 기록)'),
+      c.bundle_id && h('p', { class: 'muted' }, c.bundle_youtube_requested ? '동화 + 노래 동시 요청 · YouTube 주소 요청' : '동화 + 노래 동시 요청'),
       c.request_note && h('p', { class: 'areq__note' }, `바라는 점: ${c.request_note}`),
       c.title && h('p', {}, `제목: 「${c.title}」 · ${c.kind === 'story' ? `${pages}쪽` : `가사 ${lines}줄`} · 파일 ${files}개${c.external_url ? ' · 외부 링크 있음' : ''}`),
       uploaded && h('p', { class: 'muted' },
@@ -278,8 +279,13 @@ async function refreshSongPreview() {
 
 function syncFields() {
   const isStory = editing.kind === 'story';
+  const bundleStory = isStory && Boolean(editing.bundle_id);
   form.querySelectorAll('[data-only="song"]').forEach((el) => { el.hidden = isStory; });
   form.querySelectorAll('[data-only="story"]').forEach((el) => { el.hidden = !isStory; });
+  form.querySelector('[data-only="bundle"]').hidden = !bundleStory;
+  $('#external-label').textContent = bundleStory
+    ? `연결 영상의 YouTube 주소 (${editing.bundle_youtube_requested ? '사용자가 요청했어요' : '선택'})`
+    : '외부 링크 (선택)';
   form.querySelector('[data-only="failed"]').hidden = form.status.value !== 'failed';
 }
 form.status.addEventListener('change', syncFields);
@@ -378,11 +384,11 @@ async function loadStoryPages(c) {
 function renderMedia() {
   refreshSongPreview();
   $('#media-section').hidden = !media.length && !added.length;
-  const label = { audio: '음원', image: '커버 이미지', pdf: '동화 PDF' };
+  const label = { audio: '음원', image: '커버 이미지', pdf: '동화 PDF', video: '연결 영상' };
   const replace = (type, onSelect) => {
     const input = h('input', {
       type: 'file',
-      accept: { audio: 'audio/*', image: IMAGE_TYPES.join(','), pdf: 'application/pdf,.pdf' }[type],
+      accept: { audio: 'audio/*', image: IMAGE_TYPES.join(','), pdf: 'application/pdf,.pdf', video: 'video/mp4,.mp4' }[type],
     });
     input.addEventListener('change', async () => {
       const file = input.files[0];
@@ -414,6 +420,7 @@ function renderMedia() {
 function validAttachment(file, type) {
   const valid = type === 'audio' ? file.type.startsWith('audio/')
     : type === 'image' ? IMAGE_TYPES.includes(file.type)
+    : type === 'video' ? file.type === 'video/mp4' || (!file.type && /\.mp4$/i.test(file.name))
     : file.type === 'application/pdf' || (!file.type && /\.pdf$/i.test(file.name));
   if (!valid) toast(`${file.name}: 선택한 파일 형식을 확인해 주세요`, 'error');
   else if (file.size > MAX) toast(`${file.name}: 50MB까지 올릴 수 있어요`, 'error');
@@ -482,9 +489,15 @@ $('#pdf-input').addEventListener('change', (e) => {
   if (file && validAttachment(file, 'pdf')) selectStoryPdf(file);
 });
 
+$('#bundle-video-input').addEventListener('change', (event) => {
+  const file = event.target.files[0];
+  event.target.value = '';
+  if (file && validAttachment(file, 'video')) selectAttachment(file, 'video');
+});
+
 function openEditor(c) {
   editing = c;
-  media = (c.media ?? []).filter((m) => c.kind === 'story' ? m.type === 'pdf' : ['image', 'audio'].includes(m.type));
+  media = (c.media ?? []).filter((m) => c.kind === 'story' ? ['pdf', 'video'].includes(m.type) : ['image', 'audio'].includes(m.type));
   removed = [];
   added = [];
   const rec = state.records.find((r) => r.id === c.record_id);
@@ -516,10 +529,11 @@ function openEditor(c) {
 
 // 새로 고른 그림 하나 올리기 → 저장 경로
 async function uploadOne(c, file, uploaded, type = 'image') {
-  const ext = type === 'pdf' ? 'pdf' : /\.([a-z0-9]+)$/i.exec(file.name)?.[1].toLowerCase();
+  const contentType = { pdf: 'application/pdf', video: 'video/mp4' }[type] ?? file.type;
+  const ext = type === 'pdf' ? 'pdf' : type === 'video' ? 'mp4' : /\.([a-z0-9]+)$/i.exec(file.name)?.[1].toLowerCase();
   const path = `${c.user_id}/${c.id}/${crypto.randomUUID()}${ext ? `.${ext}` : ''}`;
   const { error } = await sb.storage.from('creation-media').upload(path, file, {
-    contentType: type === 'pdf' ? 'application/pdf' : file.type, upsert: false,
+    contentType, upsert: false,
   });
   if (error) throw new Error(`${file.name} 올리기 실패: ${error.message}`);
   uploaded.push({ type, path, name: file.name });
@@ -544,7 +558,7 @@ async function saveStory(c, uploaded) {
   ];
   return {
     content: { pages: outPages, ...(coverPath ? { cover: coverPath } : {}) },
-    media: [...nextMedia, ...media, ...uploaded.filter((m) => m.type === 'pdf')],
+    media: [...nextMedia, ...media, ...uploaded.filter((m) => m.type === 'pdf' || m.type === 'video')],
     drop: [...old.filter((m) => !keep.has(m.path)).map((m) => m.path), ...removed],
   };
 }
@@ -557,6 +571,18 @@ form.addEventListener('submit', async (e) => {
   if (!form.reportValidity()) return;
   const c = editing;
   const status = form.status.value;
+  const externalUrl = form.external_url.value.trim();
+  if (c.kind === 'story' && c.bundle_id) {
+    if (externalUrl && !/^https:\/\/(?:www\.|m\.)?(?:youtube\.com|youtu\.be)\//i.test(externalUrl)) {
+      return toast('연결 영상의 YouTube 주소를 입력해 주세요.', 'error');
+    }
+    if (status === 'ready' && ![...media, ...added].some((item) => item.type === 'video')) {
+      return toast('완료하기 전에 동화와 노래를 연결한 MP4 파일을 올려 주세요.', 'error');
+    }
+    if (status === 'ready' && c.bundle_youtube_requested && !externalUrl) {
+      return toast('사용자가 요청한 YouTube 주소를 입력해 주세요.', 'error');
+    }
+  }
   let content;
   if (c.kind === 'song') {
     try {
@@ -572,7 +598,7 @@ form.addEventListener('submit', async (e) => {
 
   if (status === 'ready') {
     const hasBody = c.kind === 'story'
-      ? (pages.some((p) => p.text.trim() || p.img) || media.length || added.length || form.external_url.value.trim())
+      ? (pages.some((p) => p.text.trim() || p.img) || [...media, ...added].some((item) => item.type === 'pdf') || (!c.bundle_id && externalUrl))
       : (content.lines?.length || media.length || added.length || form.external_url.value.trim());
     if (!form.elements.title.value.trim()) return toast('완료로 바꾸려면 제목을 적어 주세요', 'error');
     if (!hasBody) return toast('완료로 바꾸려면 글, 파일, 외부 링크 중 하나는 있어야 해요', 'error');
@@ -598,7 +624,7 @@ form.addEventListener('submit', async (e) => {
         title: form.elements.title.value.trim() || null,
         content: result.content,
         media: result.media,
-        external_url: form.external_url.value.trim() || null,
+        external_url: externalUrl || null,
         error: status === 'failed' ? (form.error.value.trim() || '요청이 취소됐어요') : null,
       }).eq('id', c.id);
       if (error) throw new Error(`저장하지 못했어요: ${error.message}`);

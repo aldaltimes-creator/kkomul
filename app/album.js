@@ -67,7 +67,7 @@ function renderPlan() {
   }
   const notice = $('#save-notice');
   notice.hidden = !(c && !c.saves_album);
-  notice.textContent = '체험권은 앨범이 저장되지 않아요. 이용 기간이 끝나고 7일이 지나면 기록이 지워져요. 계속 모아 두려면 월간 구독으로 바꿔 주세요.';
+  notice.textContent = '기존 체험권의 앨범 보관 조건은 이용권 안내를 확인해 주세요.';
 }
 
 // ---------------------------------------------------------------- 달 이동
@@ -119,7 +119,7 @@ $('#moment-form').addEventListener('submit', async (e) => {
 });
 
 // ---------------------------------------------------------------- 기록 목록
-const KIND = { story: '동화', song: '노래' };
+const KIND = { story: '동화', song: '노래', bundle: '동화 + 노래' };
 
 async function loadMonth() {
   $('#month-label').textContent = fmtMonth(state.month);
@@ -148,7 +148,9 @@ async function loadMonth() {
 
   const ids = records.map((r) => r.id);
   const [{ data: creations }, urls] = await Promise.all([
-    sb.from('creations').select('id, record_id, kind, status, title').in('record_id', ids).order('created_at'),
+    sb.from('creations').select(state.credit?.plan_code === 'story_song_bundle'
+      ? 'id, record_id, kind, status, title, bundle_id, subscription_id'
+      : 'id, record_id, kind, status, title').in('record_id', ids).order('created_at'),
     photoUrls(records.map((r) => r.photo_paths[0]).filter(Boolean)),
   ]);
   // 취소된 요청은 앨범에서 숨김 (횟수는 이미 돌려받음)
@@ -159,6 +161,11 @@ async function loadMonth() {
 function recordCard(r, urls, made) {
   const cover = r.photo_paths[0] && urls[r.photo_paths[0]];
   const c = state.credit;
+  const bundlePlan = c?.plan_code === 'story_song_bundle';
+  const existingPair = made.find((item) => item.bundle_id && item.subscription_id === c?.subscription_id);
+  const canRequestBundle = bundlePlan && ((c.stories_left > 0 && c.songs_left > 0)
+    || (existingPair?.kind === 'song' && c.stories_left > 0)
+    || (existingPair?.kind === 'story' && c.songs_left > 0));
   const makeBtn = (kind) => {
     const left = c ? (kind === 'story' ? c.stories_left : c.songs_left) : 0;
     return h('button', {
@@ -186,7 +193,10 @@ function recordCard(r, urls, made) {
         ...made.map((m) => h('a', {
           class: 'made-link', href: `creation.html?id=${m.id}`, dataset: { status: m.status },
         }, m.status === 'ready' ? `${KIND[m.kind]} 「${m.title}」` : `${KIND[m.kind]} ${STATUS_LABEL[m.status]}`)),
-        makeBtn('story'), makeBtn('song'),
+        bundlePlan ? h('button', {
+          class: 'btn btn--ghost btn--sm', type: 'button', disabled: !canRequestBundle,
+          onclick: () => askMake(r, 'bundle'),
+        }, '동화 + 노래 함께 요청') : [makeBtn('story'), makeBtn('song')],
         h('button', { class: 'btn--text', type: 'button', style: 'margin-left:auto;color:var(--ink-sub)', onclick: () => removeRecord(r) }, '지우기'),
       )));
 }
@@ -245,12 +255,17 @@ function renderExamples(kind) {
 
 function askMake(record, kind) {
   makeTarget = { record, kind };
+  const bundle = kind === 'bundle';
   const left = kind === 'story' ? state.credit.stories_left : state.credit.songs_left;
   $('#make-dialog-title').textContent = `${KIND[kind]} 요청`;
-  $('#make-text').textContent = `「${record.title}」 기록으로 ${KIND[kind]}를 요청해요. 이번 기간에 남은 ${KIND[kind]} ${left}${kind === 'story' ? '편' : '곡'} 중 1번을 써요.`;
+  $('#make-text').textContent = bundle
+    ? `「${record.title}」 기록으로 동화와 노래를 함께 요청해요. 두 작품을 연결한 영상 파일도 제공돼요.`
+    : `「${record.title}」 기록으로 ${KIND[kind]}를 요청해요. 이번 기간에 남은 ${KIND[kind]} ${left}${kind === 'story' ? '편' : '곡'} 중 1번을 써요.`;
   $('#make-note').value = '';
-  renderExamples(kind);
-  renderChips(kind);
+  $('#bundle-youtube-field').hidden = !bundle;
+  $('#bundle-youtube').checked = false;
+  renderExamples(bundle ? 'story' : kind);
+  renderChips(bundle ? 'story' : kind);
   $('#make-process').replaceChildren(processSteps(-1));
   $('#make-dialog').showModal();
 }
@@ -336,12 +351,14 @@ $('#make-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const { record, kind } = makeTarget;
   await busy(e.submitter, '요청하는 중…', async () => {
-    const { error } = await sb.rpc('request_creation', {
-      p_record: record.id, p_kind: kind, p_note: $('#make-note').value.trim() || null,
-    });
+    const params = { p_record: record.id, p_note: $('#make-note').value.trim() || null };
+    const { error } = kind === 'bundle'
+      ? await sb.rpc('request_creation_bundle', { ...params, p_youtube: $('#bundle-youtube').checked })
+      : await sb.rpc('request_creation', { ...params, p_kind: kind });
     if (error) {
       const m = error.message;
-      toast(m.includes('NO_PLAN') ? '이용권이 없어요. 이용권을 먼저 골라 주세요.'
+      toast(m.includes('NO_BUNDLE_PLAN') ? '동화와 노래를 함께 요청하려면 동시 제작 이용권을 먼저 골라 주세요.'
+        : m.includes('NO_PLAN') ? '이용권이 없어요. 이용권을 먼저 골라 주세요.'
         : m.includes('NO_CREDIT') ? `이번 기간 ${KIND[kind]} 요청을 모두 썼어요.`
         : `요청하지 못했어요: ${m}`, 'error');
       return;

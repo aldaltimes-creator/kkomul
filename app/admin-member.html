@@ -104,6 +104,10 @@
           <input class="input" type="file" id="pdf-input" accept="application/pdf,.pdf">
           <small id="pdf-progress" role="status"></small>
         </label>
+        <label class="field" data-only="bundle">
+          <span>동화와 노래를 연결한 영상 <small>MP4 · 최대 50MB</small></span>
+          <input class="input" type="file" id="bundle-video-input" accept="video/mp4,.mp4">
+        </label>
         <div class="field" data-only="story">
           <span>쪽별 그림 <small>한 쪽에 그림 한 장 · 모바일은 16:9 권장</small></span>
           <ol class="page-editor" id="page-editor"></ol>
@@ -148,7 +152,7 @@
           <ul class="media-list" id="media-list"></ul>
         </section>
 
-        <label class="field"><span>외부 링크 <small>선택 · 다른 사이트에서 만든 결과 주소</small></span>
+        <label class="field"><span id="external-label">외부 링크 <small>선택 · 다른 사이트에서 만든 결과 주소</small></span>
           <input class="input" name="external_url" type="url" placeholder="https://"></label>
         <label class="field" data-only="failed"><span>취소 이유 <small>사용자에게 보여요</small></span>
           <input class="input" name="error" maxlength="200"></label>

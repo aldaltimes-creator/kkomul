@@ -16,7 +16,15 @@
         t.tabIndex = on ? 0 : -1;
         document.getElementById(t.getAttribute('aria-controls')).hidden = !on;
       });
-      if (list.contains(document.getElementById('tab-song')) && tab.id !== 'tab-song') stopSong();
+      const video = document.getElementById('sample-video');
+      if (video && list.contains(document.getElementById('tab-song'))) {
+        if (tab.id !== 'tab-song' && video.hasAttribute('src')) {
+          video.dataset.src = video.getAttribute('src');
+          video.removeAttribute('src');
+        } else if (tab.id === 'tab-song' && !video.hasAttribute('src')) {
+          video.src = video.dataset.src;
+        }
+      }
     };
     tabs.forEach((tab, i) => {
       tab.addEventListener('click', () => select(tab));
@@ -30,43 +38,11 @@
     });
   });
 
-  // 샘플 노래: 음원 없이 가사 하이라이트와 진행 바만 재현
-  const player = document.querySelector('.player');
-  const playBtn = player.querySelector('[data-play]');
-  const bar = player.querySelector('[data-progress]');
-  const time = player.querySelector('[data-time]');
-  const lines = [...player.querySelectorAll('[data-lyrics] li')];
-  const DURATION = 24;
-  let elapsed = 0;
-  let timer = null;
-
-  const fmt = (s) => `0:${String(Math.floor(s)).padStart(2, '0')}`;
-  const render = () => {
-    bar.style.width = `${(elapsed / DURATION) * 100}%`;
-    time.textContent = `${fmt(elapsed)} / ${fmt(DURATION)}`;
-    const idx = Math.min(lines.length - 1, Math.floor((elapsed / DURATION) * lines.length));
-    lines.forEach((li, i) => li.classList.toggle('is-on', elapsed > 0 && i === idx));
-  };
-  function stopSong() {
-    clearInterval(timer);
-    timer = null;
-    player.classList.remove('is-playing');
-    playBtn.setAttribute('aria-label', '재생');
-  }
-  playBtn.addEventListener('click', () => {
-    if (timer) return stopSong();
-    if (elapsed >= DURATION) elapsed = 0;
-    player.classList.add('is-playing');
-    playBtn.setAttribute('aria-label', '일시정지');
-    timer = setInterval(() => {
-      elapsed = Math.min(DURATION, elapsed + 0.25);
-      render();
-      if (elapsed >= DURATION) stopSong();
-    }, 250);
+  document.querySelector('[data-sample-video-link]')?.addEventListener('click', () => {
+    document.getElementById('tab-song').click();
   });
-  render();
 
-  // 쪽 넘김 (동화, 웹 앨범): [data-pager] 안의 [data-page]를 한 장씩 보여 줌
+  // [data-pager] 안의 [data-page]를 한 장씩 보여 줌
   document.querySelectorAll('[data-pager]').forEach((root) => {
     const pages = [...root.querySelectorAll('[data-page]')];
     const prev = root.querySelector('[data-prev]');
@@ -85,12 +61,4 @@
     go(0);
   });
 
-  // 앨범 샘플: 웹 앨범 / 실물 책 전환
-  const viewBtns = [...document.querySelectorAll('[data-view]')];
-  viewBtns.forEach((btn) => btn.addEventListener('click', () => {
-    viewBtns.forEach((b) => b.setAttribute('aria-pressed', b === btn));
-    document.querySelectorAll('[data-album-view]').forEach((v) => {
-      v.hidden = v.dataset.albumView !== btn.dataset.view;
-    });
-  }));
 })();

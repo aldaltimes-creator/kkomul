@@ -3,7 +3,10 @@ import { h } from './lib.js';
 
 export const REQ_STATUS = { pending: '요청됨', making: '만드는 중', ready: '완료', failed: '취소' };
 export const KIND = { story: '동화', song: '노래' };
-export const PLAN = { beta_tester: '사전 체험단', trial_once: '1회 체험권', trial_month: '1개월 체험권', monthly: '월간 구독' };
+export const PLAN = {
+  beta_tester: '사전 체험단', trial_once: '1회 체험권', trial_month: '1개월 체험권', monthly: '월간 구독',
+  story_once: '동화 제작', song_once: '노래 제작', story_song_bundle: '동화 + 노래 제작',
+};
 
 export const dt = (s) => (s
   ? new Date(s).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })

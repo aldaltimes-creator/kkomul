@@ -77,6 +77,7 @@ async function renderReady() {
   const mp3 = audios.find((a) => /\.mp3$/i.test(a.name ?? '') || /\.mp3$/i.test(a.path));
   const downloadableAudio = !isStory && (mp3 ?? audios[0]);
   const pdf = isStory && media.find((m) => m.type === 'pdf');
+  const bundleVideo = isStory && c.bundle_id && media.find((m) => m.type === 'video');
   const [murls, purls] = await Promise.all([
     mediaUrls(media),
     !images.length && rec?.photo_paths?.[0] ? photoUrls([rec.photo_paths[0]]) : Promise.resolve({}),
@@ -133,7 +134,7 @@ async function renderReady() {
       h('a', { class: 'btn btn--ghost btn--sm', href: 'index.html' }, '← 앨범으로'),
       readableText.length > 0 && h('button', { class: 'btn btn--ghost btn--sm', type: 'button', onclick: () => copyText(readableText) }, '글 복사'),
       downloadableAudio && h('button', { class: 'btn btn--ghost btn--sm', type: 'button',
-        onclick: (event) => downloadAudio(event.currentTarget, downloadableAudio, c.title) }, mp3 ? 'MP3 다운로드' : '음원 다운로드'),
+        onclick: (event) => downloadFile(event.currentTarget, downloadableAudio, c.title || '노래', '음원') }, mp3 ? 'MP3 다운로드' : '음원 다운로드'),
       isStory && (imagePaths.length > 0 || pdf) && h('button', { class: 'btn btn--ghost btn--sm', type: 'button',
         'aria-label': '이미지 다운로드 (ZIP)',
         onclick: (event) => downloadImages(event.currentTarget, imagePaths, pdf, c.title) }, '이미지 다운로드'),
@@ -148,11 +149,21 @@ async function renderReady() {
     !isStory && coverPath && !cover && h('p', { class: 'notice' }, '노래 커버를 불러오지 못했어요.'),
     pdf && !murls[pdf.path] && h('p', { class: 'notice' }, '동화 PDF를 불러오지 못했어요. 새로고침해 주세요.'),
     body,
+    bundleVideo && h('section', { class: 'admin-sec', 'aria-label': '동화와 노래를 연결한 영상' },
+      h('h2', { class: 'page-title' }, '동화 + 노래 연결 영상'),
+      murls[bundleVideo.path] && h('video', {
+        class: 'bundle-video', controls: true, playsinline: true, preload: 'metadata',
+        src: murls[bundleVideo.path], 'aria-label': '동화와 노래를 연결한 영상',
+      }),
+      h('div', { class: 'creation__actions' },
+        h('button', { class: 'btn btn--ghost btn--sm', type: 'button',
+          onclick: (event) => downloadFile(event.currentTarget, bundleVideo, c.title || '연결 영상', '영상') }, '연결 영상 다운로드'),
+        c.external_url && h('a', { class: 'btn btn--ghost btn--sm', href: c.external_url, target: '_blank', rel: 'noopener noreferrer' }, 'YouTube에서 보기 ↗'))),
     h('div', { class: 'creation__actions' },
       pdf && murls[pdf.path] && h('a', { class: 'btn btn--ghost btn--sm', href: murls[pdf.path], target: '_blank', rel: 'noopener noreferrer' }, '동화 PDF 열기 ↗'),
       pdf && h('button', { class: 'btn btn--ghost btn--sm', type: 'button',
         onclick: (event) => downloadPdf(event.currentTarget, pdf, c.title) }, 'PDF 다운로드'),
-      c.external_url && h('a', { class: 'btn btn--ghost btn--sm', href: c.external_url, target: '_blank', rel: 'noopener noreferrer' },
+      c.external_url && !bundleVideo && h('a', { class: 'btn btn--ghost btn--sm', href: c.external_url, target: '_blank', rel: 'noopener noreferrer' },
         isStory ? '크게 보기 ↗' : '다른 곳에서 듣기 ↗'),
     ),
   ].filter(Boolean));
@@ -224,16 +235,16 @@ async function downloadPdf(button, pdf, title) {
   });
 }
 
-async function downloadAudio(button, audio, title) {
-  await busy(button, '음원 준비 중…', async () => {
+async function downloadFile(button, file, title, label) {
+  await busy(button, `${label} 준비 중…`, async () => {
     try {
-      const extension = /\.[a-z0-9]+$/i.exec(audio.path)?.[0] ?? '';
-      const name = fileName(audio.name || `${title || '노래'}${extension}`);
-      const { data, error } = await sb.storage.from('creation-media').createSignedUrl(audio.path, 120, { download: name });
+      const extension = /\.[a-z0-9]+$/i.exec(file.path)?.[0] ?? '';
+      const name = fileName(file.name || `${title}${extension}`);
+      const { data, error } = await sb.storage.from('creation-media').createSignedUrl(file.path, 120, { download: name });
       if (error || !data?.signedUrl) throw new Error('Missing download URL');
       startDownload(data.signedUrl, name);
     } catch {
-      toast('음원을 다운로드하지 못했어요. 다시 시도해 주세요.', 'error');
+      toast('파일을 다운로드하지 못했어요. 다시 시도해 주세요.', 'error');
     }
   });
 }

@@ -39,9 +39,40 @@
 
     <section class="admin-sec" aria-labelledby="photos-title">
       <div class="admin-sec__head"><h2 id="photos-title">올린 사진</h2><span class="muted" id="photo-count"></span></div>
-      <div class="photo-wall" id="photos"></div>
+      <button class="btn btn--primary btn--sm photo-book-open" id="photo-book-open" type="button" hidden>포토북으로 보기</button>
+      <div class="photo-days" id="photos"></div>
     </section>
   </main>
+
+  <dialog class="sheet photo-book" id="photo-book" aria-labelledby="photo-book-title">
+    <form method="dialog" class="sheet__head">
+      <h2 id="photo-book-title">우리 아이 포토북</h2>
+      <button class="sheet__close" aria-label="포토북 닫기" autofocus>×</button>
+    </form>
+    <div class="photo-book__spread">
+      <button class="photo-book__edge" id="photo-book-prev" type="button" aria-label="이전 장">‹</button>
+      <div class="photo-book__paper" id="photo-book-page"></div>
+      <button class="photo-book__edge" id="photo-book-next" type="button" aria-label="다음 장">›</button>
+    </div>
+    <p class="photo-book__count muted" id="photo-book-count" aria-live="polite"></p>
+  </dialog>
+
+  <dialog class="sheet photo-viewer" id="photo-viewer" aria-labelledby="photo-viewer-title">
+    <form method="dialog">
+      <div class="sheet__head">
+        <h2 id="photo-viewer-title">사진 보기</h2>
+        <button class="sheet__close" aria-label="닫기" autofocus>×</button>
+      </div>
+      <figure class="photo-viewer__figure">
+        <img id="viewer-image" alt="">
+        <figcaption id="viewer-caption" aria-live="polite"></figcaption>
+      </figure>
+      <div class="sheet__foot">
+        <button type="button" class="btn btn--ghost btn--sm" id="viewer-prev">이전 사진</button>
+        <button type="button" class="btn btn--ghost btn--sm" id="viewer-next">다음 사진</button>
+      </div>
+    </form>
+  </dialog>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
   <script type="module" src="albums.js"></script>

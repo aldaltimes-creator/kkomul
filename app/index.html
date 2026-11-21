@@ -103,10 +103,15 @@
           <label class="field"><span>제목</span><input class="input" name="title" required maxlength="40" placeholder="소방서 구경 간 날"></label>
         </div>
         <div class="field">
-          <span>사진 <small>최대 6장</small></span>
-          <div class="photo-pick" id="photo-pick">
-            <label class="photo-pick__add" title="사진 고르기">+<input type="file" id="photo-input" accept="image/*" multiple hidden></label>
+          <span>사진 <small>최대 10장</small></span>
+          <div class="photo-pick" id="photo-pick"></div>
+          <div class="photo-pick__actions" id="photo-actions">
+            <button type="button" class="btn btn--ghost btn--sm" id="photo-browse">사진 고르기</button>
+            <button type="button" class="btn btn--ghost btn--sm photo-pick__camera" id="photo-capture">사진 찍기</button>
+            <input type="file" id="photo-input" accept="image/*" multiple hidden>
+            <input type="file" id="camera-input" accept="image/*" capture="environment" hidden>
           </div>
+          <small id="photo-count" role="status"></small>
         </div>
         <label class="field">
           <span>오늘 있었던 일</span>
@@ -129,16 +134,17 @@
   </dialog>
 
   <!-- 이달의 순간 -->
-  <dialog class="sheet" id="moment-dialog" aria-labelledby="moment-dialog-title">
+  <dialog class="sheet" id="moment-dialog" aria-labelledby="moment-dialog-title" aria-describedby="moment-dialog-hint">
     <form method="dialog" id="moment-form">
       <div class="sheet__head">
         <h2 id="moment-dialog-title">이달의 순간</h2>
         <button class="sheet__close" value="cancel" formnovalidate aria-label="닫기">×</button>
       </div>
       <div class="sheet__body">
+        <p class="muted" id="moment-dialog-hint">이번 달에 아이가 했던 것 중 인상 깊었던 것만 적어 주세요. (선택)</p>
         <label class="field"><span>가장 좋아한 말</span><input class="input" name="favorite_word" maxlength="100" placeholder="빵빵!"></label>
-        <label class="field"><span>처음 한 말</span><input class="input" name="first_word" maxlength="100" placeholder="아빠 안아, 꼭!"></label>
-        <label class="field"><span>처음 한 행동</span><input class="input" name="first_action" maxlength="100" placeholder="크레용으로 첫 그림"></label>
+        <label class="field"><span>이번 달에 처음으로 말한 말</span><input class="input" name="first_word" maxlength="100" placeholder="아빠 안아, 꼭!"></label>
+        <label class="field"><span>이번 달에 처음으로 한 행동</span><input class="input" name="first_action" maxlength="100" placeholder="크레용으로 첫 그림"></label>
       </div>
       <div class="sheet__foot">
         <button class="btn btn--ghost btn--sm" value="cancel" formnovalidate>취소</button>

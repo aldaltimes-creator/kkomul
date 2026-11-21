@@ -78,7 +78,7 @@ $('#next-month').addEventListener('click', () => { state.month = new Date(state.
 // ---------------------------------------------------------------- 이달의 순간
 function renderMoments() {
   const m = state.moment ?? {};
-  const items = [['가장 좋아한 말', m.favorite_word], ['처음 한 말', m.first_word], ['처음 한 행동', m.first_action]];
+  const items = [['가장 좋아한 말', m.favorite_word], ['이번 달에 처음으로 말한 말', m.first_word], ['이번 달에 처음으로 한 행동', m.first_action]];
   $('#moment-list').replaceChildren(...items.map(([label, v]) =>
     h('div', { class: 'moment-item' },
       h('dt', {}, label),
@@ -180,6 +180,9 @@ function recordCard(r, urls, made) {
       r.child_words && h('p', { class: 'rec__words' }, `“${r.child_words}”`),
       r.worry && h('p', { class: 'rec__worry' }, h('b', {}, '힘들어하는 것 '), r.worry),
       h('div', { class: 'rec__actions' },
+        r.photo_paths.length > 0 && h('a', {
+          class: 'btn btn--ghost btn--sm', href: `albums.html#photos-${r.record_date}`,
+        }, `사진 ${r.photo_paths.length}장 보기`),
         ...made.map((m) => h('a', {
           class: 'made-link', href: `creation.html?id=${m.id}`, dataset: { status: m.status },
         }, m.status === 'ready' ? `${KIND[m.kind]} 「${m.title}」` : `${KIND[m.kind]} ${STATUS_LABEL[m.status]}`)),
@@ -359,7 +362,7 @@ async function refreshCredit() {
 }
 
 // ---------------------------------------------------------------- 기록 쓰기
-const MAX_PHOTOS = 6;
+const MAX_PHOTOS = 10;
 
 $('#new-record').addEventListener('click', () => {
   const f = $('#record-form');
@@ -379,18 +382,24 @@ function clearPhotos() {
 
 function renderPhotoPick() {
   const pick = $('#photo-pick');
-  const add = pick.querySelector('.photo-pick__add');
   pick.replaceChildren(
     ...state.pendingPhotos.map((p, i) => h('button', {
-      type: 'button', title: '눌러서 빼기', style: 'border:0;padding:0;background:none;cursor:pointer',
-      onclick: () => { URL.revokeObjectURL(p.url); state.pendingPhotos.splice(i, 1); renderPhotoPick(); },
-    }, h('img', { src: p.url, alt: `고른 사진 ${i + 1}, 누르면 빠져요` }))),
-    add,
+      type: 'button', class: 'photo-pick__remove', 'aria-label': `${i + 1}번째 사진 빼기`,
+      onclick: () => {
+        URL.revokeObjectURL(p.url);
+        state.pendingPhotos.splice(i, 1);
+        renderPhotoPick();
+        (pick.children[i] ?? pick.lastElementChild ?? $('#photo-browse')).focus();
+      },
+    }, h('img', { src: p.url, alt: '' }), h('span', { 'aria-hidden': 'true' }, '×'))),
   );
-  add.hidden = state.pendingPhotos.length >= MAX_PHOTOS;
+  $('#photo-actions').hidden = state.pendingPhotos.length >= MAX_PHOTOS;
+  $('#photo-count').textContent = state.pendingPhotos.length
+    ? `${state.pendingPhotos.length} / ${MAX_PHOTOS}장 선택됨`
+    : '';
 }
 
-$('#photo-input').addEventListener('change', (e) => {
+function addPhotos(e) {
   for (const file of e.target.files) {
     if (state.pendingPhotos.length >= MAX_PHOTOS) break;
     if (!file.type.startsWith('image/')) continue;
@@ -398,6 +407,16 @@ $('#photo-input').addEventListener('change', (e) => {
   }
   e.target.value = '';
   renderPhotoPick();
+  if ($('#photo-actions').hidden) $('#photo-pick').lastElementChild?.focus();
+}
+
+for (const [button, input] of [['#photo-browse', '#photo-input'], ['#photo-capture', '#camera-input']]) {
+  $(button).addEventListener('click', () => $(input).click());
+  $(input).addEventListener('change', addPhotos);
+}
+$('#record-dialog').addEventListener('close', clearPhotos);
+$('#record-dialog').addEventListener('cancel', (event) => {
+  if ($('#record-save').disabled) event.preventDefault();
 });
 
 // 긴 변 1600px JPEG로 줄여서 올림 (읽지 못하는 형식은 원본 그대로)
@@ -426,6 +445,8 @@ $('#record-form').addEventListener('submit', async (e) => {
   const uploaded = [];
 
   await busy(e.submitter, '저장하는 중…', async () => {
+    const dismissButtons = form.querySelectorAll('button[value="cancel"]');
+    dismissButtons.forEach((button) => { button.disabled = true; });
     try {
       for (const [i, p] of state.pendingPhotos.entries()) {
         const { blob, ext, type } = await shrink(p.file);
@@ -455,6 +476,8 @@ $('#record-form').addEventListener('submit', async (e) => {
     } catch (err) {
       if (uploaded.length) await sb.storage.from('record-photos').remove(uploaded);
       toast(err.message, 'error');
+    } finally {
+      dismissButtons.forEach((button) => { button.disabled = false; });
     }
   });
 });

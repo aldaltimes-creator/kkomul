@@ -1,5 +1,7 @@
 // 요청한 동화·노래 보기 (관리자가 올린 글·그림·음원·링크), 하드북 주문
-import { sb, guardConfig, requireUser, h, $, toast, fmtDate, photoUrls, busy, processSteps } from './lib.js';
+import { sb, guardConfig, requireUser, h, $, toast, fmtDate, photoUrls, busy, processSteps, songCoverPath } from './lib.js';
+import { renderPdfPages } from './story-pdf.js';
+import { activeLyric, hasLyricTiming } from './song-lyrics.js';
 
 if (!guardConfig()) await new Promise(() => {}); // 설정 전에는 여기서 멈춤
 await requireUser();
@@ -72,6 +74,9 @@ async function renderReady() {
   const media = c.media ?? [];
   const images = media.filter((m) => m.type === 'image');
   const audios = media.filter((m) => m.type === 'audio');
+  const mp3 = audios.find((a) => /\.mp3$/i.test(a.name ?? '') || /\.mp3$/i.test(a.path));
+  const downloadableAudio = !isStory && (mp3 ?? audios[0]);
+  const pdf = isStory && media.find((m) => m.type === 'pdf');
   const [murls, purls] = await Promise.all([
     mediaUrls(media),
     !images.length && rec?.photo_paths?.[0] ? photoUrls([rec.photo_paths[0]]) : Promise.resolve({}),
@@ -80,49 +85,202 @@ async function renderReady() {
 
   const pages = c.content?.pages ?? [];
   const lines = c.content?.lines ?? [];
+  let readableText = lines;
+  let imagePaths = [];
   let body;
+  let hasPlayer = false;
   if (isStory) {
     // 쪽마다 그림(content.pages[].image). 예전 방식이면 올린 순서대로 쪽에 붙임
     const perPage = pages.some((p) => p.image);
     const legacy = perPage ? [] : images.filter((m) => m.path !== c.content?.cover);
     const count = Math.max(pages.length, legacy.length);
-    const bookPages = Array.from({ length: count }, (_, i) => ({
-      text: pages[i]?.text ?? '',
-      img: murls[pages[i]?.image] ?? (legacy[i] && murls[legacy[i].path]) ?? null,
-    }));
+    const bookPages = Array.from({ length: count }, (_, i) => {
+      const path = pages[i]?.image ?? legacy[i]?.path;
+      if (path) imagePaths.push(path);
+      return { text: pages[i]?.text ?? '', img: murls[path] ?? null };
+    });
+    if (c.content?.cover && (imagePaths.length || !pdf) && !imagePaths.includes(c.content.cover)) {
+      imagePaths.unshift(c.content.cover);
+    }
     const coverImg = murls[c.content?.cover] ?? bookPages.find((p) => p.img)?.img
       ?? (rec?.photo_paths?.[0] && purls[rec.photo_paths[0]]) ?? null;
-    body = renderBook({ title: c.title ?? '동화', child: c.children?.name ?? '', coverImg, pages: bookPages });
+    readableText = bookPages.filter((p) => !p.img && p.text).map((p) => p.text);
+    if (bookPages.length || !pdf) {
+      body = renderBook({ title: c.title ?? '동화', child: c.children?.name ?? '', coverImg, pages: bookPages });
+    }
   } else {
-    body = h('div', {},
-      ...audios.map((a) => murls[a.path] && h('audio', { class: 'song-audio', controls: true, preload: 'metadata', src: murls[a.path] })),
-      lines.length > 0 && h('ol', { class: 'song-lines' }, ...lines.map((l) => h('li', {}, l))));
+    const tracks = audios.filter((a) => murls[a.path]).map((a) => ({
+      path: a.path,
+      audio: h('audio', {
+        class: 'song-audio', controls: true, preload: 'metadata', src: murls[a.path],
+        'aria-label': a.name ?? '노래 재생',
+      }),
+    }));
+    hasPlayer = tracks.length > 0;
+    const mainTrack = tracks.find((track) => track.path === audios[0]?.path);
+    const timingMatches = !c.content?.lyric_audio || c.content.lyric_audio === audios[0]?.path;
+    body = h('div', {}, songPlayers(tracks),
+      lines.length > 0 && renderLyrics(lines, timingMatches ? c.content?.line_times : null, mainTrack?.audio));
   }
   // 노래: 올린 커버 그림, 없으면 기록 사진 (동화는 책 표지에 들어감)
-  const cover = isStory ? null : (images[0] ? murls[images[0].path] : rec?.photo_paths?.[0] && purls[rec.photo_paths[0]]);
+  const coverPath = songCoverPath(media, c.content?.cover);
+  const cover = isStory ? null : (coverPath ? murls[coverPath] : purls[rec?.photo_paths?.[0]]);
 
   // replaceChildren 은 false 를 글자로 넣으므로 빈 항목을 걸러 냄
+  root.classList.toggle('creation--has-player', hasPlayer);
   root.replaceChildren(...[
-    h('p', { class: 'creation__type' }, isStory ? '동화' : `노래${c.content?.mood ? ` · ${c.content.mood}` : ''}`),
-    h('h1', { class: 'creation__title' }, c.title ?? KIND[c.kind]),
+    h('div', { class: `creation__actions creation__actions--top${isStory ? ' creation__actions--story' : ''}` },
+      h('a', { class: 'btn btn--ghost btn--sm', href: 'index.html' }, '← 앨범으로'),
+      readableText.length > 0 && h('button', { class: 'btn btn--ghost btn--sm', type: 'button', onclick: () => copyText(readableText) }, '글 복사'),
+      downloadableAudio && h('button', { class: 'btn btn--ghost btn--sm', type: 'button',
+        onclick: (event) => downloadAudio(event.currentTarget, downloadableAudio, c.title) }, mp3 ? 'MP3 다운로드' : '음원 다운로드'),
+      isStory && (imagePaths.length > 0 || pdf) && h('button', { class: 'btn btn--ghost btn--sm', type: 'button',
+        'aria-label': '이미지 다운로드 (ZIP)',
+        onclick: (event) => downloadImages(event.currentTarget, imagePaths, pdf, c.title) }, '이미지 다운로드'),
+      isStory && h('button', { class: 'btn btn--primary btn--sm', type: 'button', onclick: openOrder }, '하드북으로 받기')),
+    h('div', { class: 'creation__heading' },
+      h('span', { class: 'creation__type' }, KIND[c.kind]),
+      h('h1', { class: 'creation__title' }, c.title ?? KIND[c.kind])),
+    !isStory && c.content?.mood && h('p', { class: 'muted' }, c.content.mood),
     h('p', { class: 'muted' },
       `${c.children?.name ?? ''}의 ${rec ? `${fmtDate(rec.record_date)} 「${rec.title}」` : ''} 기록으로 만들었어요`),
-    cover && h('img', { class: 'creation__photo', src: cover, alt: `${rec.title} 사진` }),
+    cover && h('img', { class: 'creation__photo', src: cover, alt: `${c.title ?? '노래'} 커버 이미지` }),
+    !isStory && coverPath && !cover && h('p', { class: 'notice' }, '노래 커버를 불러오지 못했어요.'),
+    pdf && !murls[pdf.path] && h('p', { class: 'notice' }, '동화 PDF를 불러오지 못했어요. 새로고침해 주세요.'),
     body,
     h('div', { class: 'creation__actions' },
-      h('a', { class: 'btn btn--ghost btn--sm', href: 'index.html' }, '← 앨범으로'),
+      pdf && murls[pdf.path] && h('a', { class: 'btn btn--ghost btn--sm', href: murls[pdf.path], target: '_blank', rel: 'noopener noreferrer' }, '동화 PDF 열기 ↗'),
+      pdf && h('button', { class: 'btn btn--ghost btn--sm', type: 'button',
+        onclick: (event) => downloadPdf(event.currentTarget, pdf, c.title) }, 'PDF 다운로드'),
       c.external_url && h('a', { class: 'btn btn--ghost btn--sm', href: c.external_url, target: '_blank', rel: 'noopener noreferrer' },
         isStory ? '크게 보기 ↗' : '다른 곳에서 듣기 ↗'),
-      isStory && h('button', { class: 'btn btn--primary btn--sm', type: 'button', onclick: openOrder }, '하드북으로 받기 · 35,000원'),
-      (pages.length > 0 || lines.length > 0) && h('button', { class: 'btn btn--ghost btn--sm', type: 'button', onclick: copyText }, '글 복사'),
     ),
   ].filter(Boolean));
 }
 
+function songPlayers(tracks) {
+  const bars = tracks.map(({ audio }, index) =>
+    h('div', { class: `song-player${index === 0 ? ' song-player--dock' : ''}` }, audio));
+  for (const [index, { audio }] of tracks.entries()) {
+    audio.addEventListener('play', () => {
+      bars.forEach((bar, other) => {
+        bar.classList.toggle('song-player--dock', other === index);
+        if (other !== index) tracks[other].audio.pause();
+      });
+    });
+  }
+  return bars;
+}
+
+function renderLyrics(lines, times, player) {
+  const rows = lines.map((line) => h('li', {}, line));
+  const synced = Boolean(player) && hasLyricTiming(lines, times);
+  const list = h('ol', {
+    class: `song-lines${synced ? ' song-lines--synced' : ''}`,
+    tabindex: synced ? '0' : null, 'aria-label': '노래 가사',
+  }, rows);
+  if (!synced) return list;
+  let active = -1;
+  const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+
+  function update(event) {
+    const index = activeLyric(player.currentTime, times);
+    if (active === index) return;
+    rows[active]?.removeAttribute('aria-current');
+    active = index;
+    if (index < 0) {
+      list.scrollTop = 0;
+      return;
+    }
+    const row = rows[index];
+    row.setAttribute('aria-current', 'true');
+    const offset = row.getBoundingClientRect().top - list.getBoundingClientRect().top;
+    list.scrollTo({
+      top: list.scrollTop + offset + (row.offsetHeight - list.clientHeight) / 2,
+      behavior: reducedMotion.matches || event.type === 'seeked' ? 'instant' : 'smooth',
+    });
+  }
+  for (const name of ['play', 'timeupdate', 'seeked']) player.addEventListener(name, update);
+  return list;
+}
+
+function fileName(value) {
+  return (value ?? '').replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').trim().replace(/\.+$/, '') || '동화';
+}
+
+function startDownload(url, name) {
+  const link = h('a', { href: url, download: name });
+  document.body.append(link);
+  link.click();
+  link.remove();
+}
+
+async function downloadPdf(button, pdf, title) {
+  await busy(button, 'PDF 준비 중…', async () => {
+    const name = `${fileName(pdf.name?.replace(/\.pdf$/i, '') ?? title)}.pdf`;
+    const { data, error } = await sb.storage.from('creation-media').createSignedUrl(pdf.path, 120, { download: name });
+    if (error || !data?.signedUrl) return toast('PDF를 다운로드하지 못했어요. 다시 시도해 주세요.', 'error');
+    startDownload(data.signedUrl, name);
+  });
+}
+
+async function downloadAudio(button, audio, title) {
+  await busy(button, '음원 준비 중…', async () => {
+    try {
+      const extension = /\.[a-z0-9]+$/i.exec(audio.path)?.[0] ?? '';
+      const name = fileName(audio.name || `${title || '노래'}${extension}`);
+      const { data, error } = await sb.storage.from('creation-media').createSignedUrl(audio.path, 120, { download: name });
+      if (error || !data?.signedUrl) throw new Error('Missing download URL');
+      startDownload(data.signedUrl, name);
+    } catch {
+      toast('음원을 다운로드하지 못했어요. 다시 시도해 주세요.', 'error');
+    }
+  });
+}
+
+async function downloadImages(button, paths, pdf, title) {
+  await busy(button, '이미지 준비 중…', async () => {
+    try {
+      const { default: JSZip } = await import('https://cdn.jsdelivr.net/npm/jszip@3.10.1/+esm');
+      const zip = new JSZip();
+      const pagePaths = paths.length ? paths : [pdf.path];
+      const urls = await mediaUrls([...new Set(pagePaths)].map((path) => ({ path })));
+      const fetchFile = async (path) => {
+        if (!urls[path]) throw new Error('파일 주소를 받을 수 없어요.');
+        const response = await fetch(urls[path]);
+        if (!response.ok) throw new Error('파일을 읽을 수 없어요.');
+        return response;
+      };
+      if (paths.length) {
+        for (const [index, path] of paths.entries()) {
+          button.textContent = `이미지 준비 중 · ${index + 1} / ${paths.length}`;
+          const response = await fetchFile(path);
+          const ext = /\.(jpe?g|png|webp)$/i.exec(path)?.[1].toLowerCase()
+            ?? ({ 'image/png': 'png', 'image/webp': 'webp' }[response.headers.get('content-type')] ?? 'jpg');
+          zip.file(`page-${String(index + 1).padStart(Math.max(3, String(paths.length).length), '0')}.${ext}`, await response.arrayBuffer());
+        }
+      } else {
+        const response = await fetchFile(pdf.path);
+        await renderPdfPages(await response.arrayBuffer(), async (blob, name, number, total) => {
+          button.textContent = `이미지 만드는 중 · ${number} / ${total}`;
+          zip.file(name, await blob.arrayBuffer());
+        });
+      }
+      const url = URL.createObjectURL(await zip.generateAsync({ type: 'blob' }));
+      try { startDownload(url, `${fileName(title)}-이미지.zip`); }
+      finally { setTimeout(() => URL.revokeObjectURL(url), 60_000); }
+    } catch (error) {
+      toast(error.name === 'PasswordException' ? '암호가 걸린 PDF는 이미지로 받을 수 없어요.'
+        : '이미지 ZIP을 만들지 못했어요. 연결을 확인하고 다시 시도해 주세요.', 'error');
+    }
+  });
+}
+
 // ---------------------------------------------------------------- 그림책 보기
-// 표지 → 쪽마다 펼침면(왼쪽 그림, 오른쪽 글) → 끝. 버튼·화살표 키·밀기·쪽 끝 누르기로 넘김
+// 표지 → 쪽마다 그림 한 장(예전 글 전용 쪽은 글) → 끝
 function renderBook({ title, child, coverImg, pages }) {
   const views = [{ kind: 'cover' }, ...pages.map((p, i) => ({ kind: 'page', ...p, n: i + 1 })), { kind: 'end' }];
+  const mobile = matchMedia('(max-width: 720px)');
   let at = 0;
 
   const stage = h('div', { class: 'pbook__stage' });
@@ -131,9 +289,12 @@ function renderBook({ title, child, coverImg, pages }) {
   const next = h('button', { type: 'button', class: 'pbook__arrow pbook__arrow--next', 'aria-label': '다음 쪽' }, '›');
   const bar = h('input', { type: 'range', class: 'pbook__bar', min: 0, max: views.length - 1, value: 0, 'aria-label': '쪽 고르기' });
   const full = h('button', { type: 'button', class: 'btn btn--ghost btn--sm pbook__full' }, '크게 보기');
+  full.hidden = !document.fullscreenEnabled;
   const book = h('section', { class: 'pbook', tabindex: '0', 'aria-roledescription': '그림책', 'aria-label': `「${title}」 그림책` },
+    h('p', { class: 'pbook__rotate-hint muted' }, '휴대폰을 가로로 돌리면 그림책을 더 크게 볼 수 있어요.'),
     h('div', { class: 'pbook__frame' }, prev, stage, next),
-    h('div', { class: 'pbook__nav' }, counter, bar, full));
+    h('div', { class: 'pbook__nav' }, counter, bar, full),
+    h('p', { class: 'pbook__tap-hint muted' }, '책 왼쪽은 이전 장, 오른쪽은 다음 장'));
 
   const textPage = (v) => h('div', { class: 'pbook__page pbook__page--text' },
     h('p', { class: 'pbook__text' }, v.text),
@@ -142,12 +303,11 @@ function renderBook({ title, child, coverImg, pages }) {
   function spread(v) {
     if (v.kind === 'cover') {
       return h('div', { class: 'pbook__spread pbook__spread--cover' },
-        h('div', { class: 'pbook__cover' },
-          coverImg && h('img', { src: coverImg, alt: '' }),
-          h('div', { class: 'pbook__cover-band' },
+        h('div', { class: 'pbook__cover pbook__cover--front' },
+          coverImg ? h('img', { src: coverImg, alt: `「${title}」 표지` })
+            : h('div', { class: 'pbook__cover-band' },
             h('p', { class: 'pbook__cover-title' }, title),
-            child && h('p', { class: 'pbook__cover-sub' }, `${child}의 이야기 · 꼬물상자`)),
-          h('span', { class: 'pbook__hint' }, '넘겨 보세요 ›')));
+            child && h('p', { class: 'pbook__cover-sub' }, `${child}의 이야기 · 꼬물상자`))));
     }
     if (v.kind === 'end') {
       return h('div', { class: 'pbook__spread pbook__spread--cover' },
@@ -157,9 +317,8 @@ function renderBook({ title, child, coverImg, pages }) {
           h('button', { type: 'button', class: 'btn btn--ghost btn--sm', onclick: () => go(0) }, '처음부터 다시 보기')));
     }
     if (!v.img) return h('div', { class: 'pbook__spread pbook__spread--solo' }, textPage(v));
-    return h('div', { class: 'pbook__spread' },
-      h('div', { class: 'pbook__page pbook__page--art' }, h('img', { src: v.img, alt: `${v.n}쪽 그림` })),
-      v.text ? textPage(v) : h('div', { class: 'pbook__page pbook__page--text' }, h('span', { class: 'pbook__num' }, `${v.n}`)));
+    return h('div', { class: 'pbook__spread pbook__spread--solo pbook__spread--image-only' },
+      h('div', { class: 'pbook__page pbook__page--art' }, h('img', { src: v.img, alt: `${v.n}쪽 그림` })));
   }
 
   function go(to, dir = to > at ? 'next' : 'prev') {
@@ -182,22 +341,29 @@ function renderBook({ title, child, coverImg, pages }) {
   next.addEventListener('click', () => go(at + 1));
   bar.addEventListener('input', () => go(Number(bar.value)));
   book.addEventListener('keydown', (e) => {
-    if (e.target === bar) return;
+    if (e.target.closest('button, input')) return;
     if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') { e.preventDefault(); go(at + 1); }
     if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); go(at - 1); }
     if (e.key === 'Home') go(0);
     if (e.key === 'End') go(views.length - 1);
   });
   // 밀어서 넘기기, 쪽 왼쪽/오른쪽 끝 누르기
-  let sx = null;
-  stage.addEventListener('pointerdown', (e) => { sx = e.clientX; });
+  let start = null;
+  stage.addEventListener('pointerdown', (e) => {
+    if (e.isPrimary && e.button === 0) start = { x: e.clientX, y: e.clientY, id: e.pointerId };
+  });
+  stage.addEventListener('pointercancel', () => { start = null; });
   stage.addEventListener('pointerup', (e) => {
-    if (sx == null) return;
-    const dx = e.clientX - sx; sx = null;
+    if (start?.id !== e.pointerId) return;
+    const dx = e.clientX - start.x;
+    const dy = e.clientY - start.y;
+    start = null;
     if (e.target.closest('button')) return;
-    if (Math.abs(dx) > 40) return go(at + (dx < 0 ? 1 : -1));
+    if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)) return go(at + (dx < 0 ? 1 : -1));
+    if (Math.abs(dx) > 12 || Math.abs(dy) > 12) return;
     const r = stage.getBoundingClientRect();
     const x = (e.clientX - r.left) / r.width;
+    if (mobile.matches) return go(at + (x < 0.5 ? -1 : 1));
     if (x > 0.8) go(at + 1); else if (x < 0.2) go(at - 1);
   });
   full.addEventListener('click', () => {
@@ -212,9 +378,8 @@ function renderBook({ title, child, coverImg, pages }) {
   return book;
 }
 
-async function copyText() {
-  const c = creation;
-  const text = [c.title, '', ...(c.kind === 'story' ? (c.content?.pages ?? []).map((p) => p.text) : (c.content?.lines ?? []))].join('\n');
+async function copyText(lines) {
+  const text = [creation.title, '', ...lines].join('\n');
   try { await navigator.clipboard.writeText(text); toast('복사했어요'); }
   catch { toast('복사하지 못했어요. 글을 길게 눌러 복사해 주세요.', 'error'); }
 }

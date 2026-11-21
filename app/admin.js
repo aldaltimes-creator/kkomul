@@ -1,9 +1,9 @@
 // 관리자 화면: 요약, 동화·노래 요청, 회원 목록, 하드북 주문
 import { sb, guardConfig, requireUser, h, $, toast } from './lib.js';
-import { REQ_STATUS, KIND, PLAN, dt, statusBadge, emptyRow } from './admin-common.js';
+import { REQ_STATUS, KIND, PLAN, dt, statusBadge, emptyRow, historyDate, historySummary } from './admin-common.js';
 
 if (!guardConfig()) await new Promise(() => {}); // 설정 전에는 여기서 멈춤
-await requireUser();
+const currentAdmin = await requireUser();
 
 const ORDER_STATUS = { requested: '접수', paid: '결제 완료', printing: '제작 중', shipped: '배송 중', canceled: '취소' };
 
@@ -112,9 +112,51 @@ async function loadAll() {
   await Promise.all([loadStats(), loadRequests(), loadOrders()]);
 }
 
+const historyPanel = $('#my-upload-history');
+const historyList = $('#my-upload-list');
+const historyMore = $('#my-upload-more');
+let historyOffset = 0;
+let loadingHistory = false;
+
+async function loadMyHistory(reset = false) {
+  if (loadingHistory) return;
+  loadingHistory = true;
+  historyMore.disabled = true;
+  if (reset) {
+    historyOffset = 0;
+    historyList.replaceChildren(h('li', { class: 'muted' }, '이력을 불러오는 중이에요.'));
+  }
+  const pageSize = 30;
+  const { data, error } = await sb.from('creation_upload_history')
+    .select('creation_id, member_id, occurred_at, kind, title, status, published, added_count, removed_count')
+    .eq('admin_id', currentAdmin.id).order('occurred_at', { ascending: false }).order('id', { ascending: false })
+    .range(historyOffset, historyOffset + pageSize);
+  loadingHistory = false;
+  historyMore.disabled = false;
+  if (error) {
+    if (reset) historyList.replaceChildren(h('li', { class: 'muted' }, '업로드 이력을 불러올 수 없어요.'));
+    else toast('이전 이력을 불러오지 못했어요.', 'error');
+    return;
+  }
+  if (reset) historyList.replaceChildren();
+  const events = data.slice(0, pageSize);
+  historyList.append(...events.map((event) =>
+    h('li', {}, h('time', { datetime: event.occurred_at }, historyDate(event.occurred_at)),
+      memberLink(event.member_id, event.title || KIND[event.kind], `#req-${event.creation_id}`),
+      h('span', {}, historySummary(event)), statusBadge(event.status))));
+  if (!events.length && reset) historyList.append(h('li', { class: 'muted' }, '아직 기록된 이력이 없어요.'));
+  historyOffset += events.length;
+  historyMore.hidden = data.length <= pageSize;
+}
+
+historyPanel.addEventListener('toggle', () => { if (historyPanel.open) loadMyHistory(true); });
+historyMore.addEventListener('click', () => loadMyHistory());
 $('#req-filter').addEventListener('change', loadRequests);
 $('#order-filter').addEventListener('change', loadOrders);
-$('#reload').addEventListener('click', loadAll);
+$('#reload').addEventListener('click', () => {
+  loadAll();
+  if (historyPanel.open) loadMyHistory(true);
+});
 
 // 새 요청·주문이 들어오면 화면을 자동으로 새로 고침
 sb.channel('admin-live')

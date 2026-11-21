@@ -45,6 +45,21 @@ function decorateNav() {
   const intro = h('a', { href: '../index.html', class: 'nav-intro' }, '소개');
   const out = h('button', { type: 'button', class: 'nav-logout', onclick: signOut }, '로그아웃');
   nav.append(intro, out);
+  const menu = h('button', {
+    type: 'button', class: 'app-top__toggle',
+    'aria-controls': 'app-menu', 'aria-expanded': 'false',
+  }, '메뉴');
+  nav.id = 'app-menu';
+  nav.before(menu);
+  menu.addEventListener('click', () => {
+    const open = menu.getAttribute('aria-expanded') === 'true';
+    menu.setAttribute('aria-expanded', String(!open));
+  });
+  nav.parentElement.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape' || menu.getAttribute('aria-expanded') !== 'true' || !menu.offsetWidth) return;
+    menu.setAttribute('aria-expanded', 'false');
+    menu.focus();
+  });
   addAdminLink(nav, intro);
 }
 
@@ -81,6 +96,11 @@ export function h(tag, attrs = {}, ...children) {
 }
 
 export const $ = (sel, root = document) => root.querySelector(sel);
+
+export function songCoverPath(media, preferred) {
+  return media.find((item) => item.type === 'image' && item.path === preferred)?.path
+    ?? media.find((item) => item.type === 'image')?.path;
+}
 
 // 알림 한 줄
 let toastTimer;

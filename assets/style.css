@@ -754,6 +754,12 @@ button { font: inherit; color: inherit; }
   .plan__for { min-height: 0; }
 }
 @media (max-width: 720px) {
+  .top__inner { gap: 8px; }
+  .top__inner .logo { font-size: 17px; }
+  .top__inner .logo svg { width: 28px; height: 28px; }
+  .top__actions { gap: 8px; font-size: 14px; }
+  .top__actions .link { display: inline-flex; align-items: center; min-height: 44px; }
+  .top__actions .btn { min-height: 44px; padding-inline: 12px; }
   .steps, .safe { grid-template-columns: 1fr; }
   .steps { gap: 36px; }
   .player { grid-template-columns: 1fr; padding: 24px 20px; text-align: center; }
@@ -767,7 +773,9 @@ button { font: inherit; color: inherit; }
   .made__row { grid-template-columns: 1fr; gap: 6px; }
   .made__arrow { justify-self: center; rotate: 90deg; }
   .moments { grid-template-columns: 1fr; }
-  .spread__page--text { padding: 18px; gap: 12px; }
+  .spread { grid-template-columns: minmax(0, 1fr); }
+  .spread__page--text { aspect-ratio: auto; min-height: 160px; padding: 18px 18px 32px; gap: 12px; }
+  .spread__page--art::after { display: none; }
   .month-flow__list { grid-template-columns: repeat(2, 1fr); }
   .month-flow__list li:last-child { grid-column: 1 / -1; max-width: 50%; justify-self: center; width: 100%; }
   .month-flow { padding: 20px 14px; }

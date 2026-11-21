@@ -96,31 +96,57 @@
 
         <label class="field" data-only="song"><span>분위기 <small>예: 자장가, 신나게</small></span><input class="input" name="mood" maxlength="30"></label>
         <div class="field" data-only="story">
-          <span>표지 그림 <small>선택 · 비워 두면 1쪽 그림을 표지로 써요</small></span>
+          <span>표지 그림 <small>선택 · 가로 16:9 권장 · 비워 두면 1쪽 그림을 표지로 써요</small></span>
           <div id="cover-slot"></div>
         </div>
+        <label class="field" data-only="story">
+          <span>동화 PDF <small>최대 50MB · 페이지마다 그림 한 장을 자동으로 만들어요</small></span>
+          <input class="input" type="file" id="pdf-input" accept="application/pdf,.pdf">
+          <small id="pdf-progress" role="status"></small>
+        </label>
         <div class="field" data-only="story">
-          <span>쪽 <small>쪽마다 그림 한 장과 글 · 정사각형 그림이 가장 잘 맞아요 · 사용자에게는 책처럼 넘겨 보여요</small></span>
+          <span>쪽별 그림 <small>한 쪽에 그림 한 장 · 모바일은 16:9 권장</small></span>
           <ol class="page-editor" id="page-editor"></ol>
           <div class="page-editor__tools">
             <button type="button" class="btn btn--ghost btn--sm" id="page-add">+ 쪽 추가</button>
-            <label class="btn btn--ghost btn--sm">그림 여러 장 한 번에 넣기
-              <input type="file" id="page-bulk" accept="image/*" multiple hidden></label>
-            <button type="button" class="btn btn--ghost btn--sm" id="page-split">글 붙여넣어 쪽 나누기</button>
+            <button type="button" class="btn btn--ghost btn--sm" id="page-bulk-button">그림 여러 장 한 번에 넣기</button>
+            <input type="file" id="page-bulk" accept="image/jpeg,image/png,image/webp" multiple hidden>
           </div>
           <small class="muted">여러 장을 넣으면 파일 이름 순서대로 그림 없는 쪽부터 채우고, 남으면 쪽을 새로 만들어요.</small>
         </div>
 
         <label class="field" data-only="song">
-          <span id="text-label">노래 가사 <small>한 줄에 한 소절씩</small></span>
+          <span id="text-label">노래 가사 <small>한 줄에 한 소절씩 · 정확한 구간은 각 줄 앞에 [00:12.50]처럼 시작 시간을 적어 주세요</small></span>
           <textarea class="textarea" name="text" style="min-height:180px"></textarea>
         </label>
 
+        <label class="field" data-only="song">
+          <span>음원 <small>파일당 최대 50MB</small></span>
+          <input class="input" type="file" id="media-input" accept="audio/*" multiple>
+        </label>
+        <section class="field" data-only="song" aria-labelledby="lyric-timing-title">
+          <span id="lyric-timing-title">가사 시간 맞추기</span>
+          <audio id="lyric-audio" controls preload="metadata" hidden></audio>
+          <p class="muted" id="lyric-timing-help" role="status">음원을 첨부하면 가사 시간을 맞출 수 있어요.</p>
+          <div class="page-editor__tools">
+            <button class="btn btn--ghost btn--sm" id="lyric-timing-start" type="button" disabled>시간 맞추기 시작</button>
+            <button class="btn btn--primary btn--sm" id="lyric-timing-mark" type="button" hidden>이 줄 시작 찍기</button>
+            <button class="btn btn--ghost btn--sm" id="lyric-timing-cancel" type="button" hidden>그만하기</button>
+          </div>
+        </section>
+        <label class="field" data-only="song">
+          <span>노래 커버 이미지 <small>선택 · JPG, PNG, WebP 중 한 장</small></span>
+          <input class="input" type="file" id="song-cover-input" accept="image/jpeg,image/png,image/webp">
+        </label>
         <div class="field" data-only="song">
-          <span>파일 <small id="file-hint">그림(JPG·PNG·WEBP). 올린 순서대로 1쪽, 2쪽에 붙어요</small></span>
-          <ul class="media-list" id="media-list"></ul>
-          <input type="file" id="media-input" multiple>
+          <span>사용자 화면의 대표 이미지</span>
+          <img id="song-cover-preview" class="creation__photo song-cover-preview" alt="노래 대표 이미지" hidden>
+          <p class="muted" id="song-cover-status" role="status"></p>
         </div>
+        <section class="field" id="media-section" aria-labelledby="media-heading" hidden>
+          <span id="media-heading">첨부 파일</span>
+          <ul class="media-list" id="media-list"></ul>
+        </section>
 
         <label class="field"><span>외부 링크 <small>선택 · 다른 사이트에서 만든 결과 주소</small></span>
           <input class="input" name="external_url" type="url" placeholder="https://"></label>

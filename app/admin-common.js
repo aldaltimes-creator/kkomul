@@ -11,5 +11,16 @@ export const dt = (s) => (s
 
 export const statusBadge = (s) => h('span', { class: 'badge', dataset: { status: s } }, REQ_STATUS[s] ?? s);
 
+export const historyDate = (value) => new Date(value).toLocaleString('ko-KR', {
+  timeZone: 'Asia/Seoul', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit',
+});
+
+export function historySummary(event) {
+  const { added_count: added, removed_count: removed } = event;
+  const change = added && removed ? `파일 변경 (추가 ${added}개, 제외 ${removed}개)`
+    : added ? `파일 ${added}개 업로드` : removed ? `파일 ${removed}개 제외` : '작품 저장';
+  return event.published ? `${change} · 사용자에게 공개` : change;
+}
+
 export const emptyRow = (cols, text) =>
   h('tr', {}, h('td', { colspan: cols, class: 'muted', style: 'text-align:center;padding:24px' }, text));

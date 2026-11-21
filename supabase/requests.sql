@@ -9,7 +9,7 @@
 
 -- ---------- 작품(요청) 테이블 확장 ----------
 alter table public.creations add column if not exists request_note text;
-alter table public.creations add column if not exists media jsonb not null default '[]'::jsonb; -- [{type:'image'|'audio', path, name}]
+alter table public.creations add column if not exists media jsonb not null default '[]'::jsonb; -- [{type:'image'|'audio'|'pdf', path, name}]
 alter table public.creations add column if not exists external_url text;
 alter table public.creations add column if not exists updated_at timestamptz;
 alter table public.creations add column if not exists notified_at timestamptz;
@@ -91,7 +91,7 @@ create policy "admin photos read" on storage.objects for select to authenticated
 -- 경로: {사용자 id}/{작품 id}/{파일}
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values ('creation-media', 'creation-media', false, 52428800,
-        array['image/jpeg', 'image/png', 'image/webp', 'audio/mpeg', 'audio/mp4', 'audio/x-m4a', 'audio/m4a', 'audio/wav', 'audio/x-wav', 'audio/aac', 'audio/ogg'])
+        array['image/jpeg', 'image/png', 'image/webp', 'audio/mpeg', 'audio/mp4', 'audio/x-m4a', 'audio/m4a', 'audio/wav', 'audio/x-wav', 'audio/aac', 'audio/ogg', 'application/pdf'])
 on conflict (id) do update set file_size_limit = excluded.file_size_limit, allowed_mime_types = excluded.allowed_mime_types;
 
 drop policy if exists "creation media read"   on storage.objects;
